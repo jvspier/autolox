@@ -1,0 +1,20 @@
+# credentials — never commit
+.env
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# runtime output
+enrolled.csv
+lox_token.cfg
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
