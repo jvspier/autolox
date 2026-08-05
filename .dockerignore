@@ -1,0 +1,32 @@
+# Copy of .gitignore intent, plus a few extras that shouldn't be in
+# the image (git metadata, editor debris, IDE state).
+.git/
+.gitignore
+.gitattributes
+
+.env
+autolox.db
+autolox.db-*
+enrolled.csv
+lox_token.cfg
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+.vscode/
+.idea/
+.DS_Store
+
+# Internal docs that don't ship
+docs/internal/
+
+# Deployment artifacts belong outside the image
+deploy/
+Dockerfile
+docker-compose.yml
+.dockerignore

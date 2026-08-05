@@ -21,8 +21,35 @@ you'd otherwise be clicking "Learn NFC Tag" 250 times.
 
 ## Quick start
 
+Three ways to run it, pick whichever fits your environment.
+
+### Docker (recommended for most people)
+
 ```
-git clone https://github.com/<you>/autolox.git
+git clone https://github.com/jvspier/autolox.git
+cd autolox
+cp .env.example .env       # edit with your Miniserver IPs, service account, passwords
+docker compose up -d
+```
+
+Open **http://your-docker-host:8000**. See [docs/deploy-docker.md](docs/deploy-docker.md)
+for HTTPS, backups, and the fine print.
+
+### LXC on Proxmox
+
+One-shot installer on a fresh Debian/Ubuntu LXC (as root):
+
+```
+curl -fsSL https://raw.githubusercontent.com/jvspier/autolox/main/deploy/lxc-install.sh | bash
+```
+
+Then edit `/etc/autolox/env` and `systemctl start autolox`. See
+[docs/deploy-lxc.md](docs/deploy-lxc.md) for the manual steps and the details.
+
+### Local Python (dev / one-off use)
+
+```
+git clone https://github.com/jvspier/autolox.git
 cd autolox
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e '.[web]'

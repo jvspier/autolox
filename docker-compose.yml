@@ -1,0 +1,53 @@
+# autolox — Docker Compose recipe for redistribution
+#
+# Quick start (once .env is filled in):
+#   docker compose up -d
+#   open http://<docker-host>:8000
+#
+# For HTTPS: put your existing reverse proxy (Nginx Proxy Manager,
+# Traefik, Caddy, Cloudflare Tunnel, whatever) in front of this
+# service. autolox itself only speaks plain HTTP on 8000 — matches
+# every other self-hosted homelab tool.
+#
+# See docs/deploy-docker.md for HTTPS via a bundled Caddy snippet.
+
+services:
+  autolox:
+    build: .
+    # Or, once we publish a pre-built image:
+    #   image: ghcr.io/jvspier/autolox:latest
+    container_name: autolox
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    # Config loaded from the local .env file. docker compose picks
+    # this up automatically — the SAME .env you'd use running the
+    # tool directly. Values below override / supplement as needed.
+    env_file:
+      - .env
+    environment:
+      # The DB lives in the mounted /data volume so it survives
+      # `docker compose down` / image rebuilds.
+      AUTOLOX_DB: /data/autolox.db
+      # Optional CSV export path — set to enable, unset to disable.
+      # AUTOLOX_CSV_EXPORT: /data/enrolled.csv
+    volumes:
+      - autolox-data:/data
+    # Only expose the app on the Docker host's LAN interface. This
+    # is a LAN-only tool by design; there's no reason to bind it to
+    # the internet even if the host is public.
+    # Adjust `127.0.0.1` below to a specific LAN address if you want
+    # colleagues on the LAN to reach it directly:
+    # ports:
+    #   - "192.168.1.42:8000:8000"
+
+volumes:
+  autolox-data:
+    # Named volume — Docker manages the location. If you want a
+    # bind mount instead (e.g. to back it up as a plain directory
+    # or peek at the SQLite file), replace with:
+    #   driver: local
+    #   driver_opts:
+    #     type: none
+    #     o: bind
+    #     device: /var/lib/autolox

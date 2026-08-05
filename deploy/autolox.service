@@ -1,0 +1,34 @@
+[Unit]
+Description=autolox — Loxone NFC card enrolment web app
+Documentation=https://github.com/jvspier/autolox
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=autolox
+Group=autolox
+WorkingDirectory=/opt/autolox
+EnvironmentFile=/etc/autolox/env
+ExecStart=/opt/autolox/.venv/bin/uvicorn autolox_web.app:app \
+    --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+
+# Basic hardening — same shape as any well-behaved systemd unit.
+# Adjust if your LXC's kernel doesn't support these (very old LXCs
+# from before ~2020 might complain about a few of these).
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/autolox
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+
+[Install]
+WantedBy=multi-user.target
