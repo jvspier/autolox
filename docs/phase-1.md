@@ -18,7 +18,7 @@ tool is ready for a real seasonal batch.
 - Python 3.10+ with `autolox` package installable — `pip install -e .` from the
   repo root, or dependencies installed into a venv (see CLAUDE.md).
 - Miniserver **LAN** address, not `dyndns.loxonecloud.com`.
-- 5 blank DESFire cards + a names file with 5 fake names (`test-names.txt`).
+- 5 blank DESFire cards + a names file with 5 fake names (`docs/example-roster.txt`).
 - A Code Touch on a non-critical door for the test. In our environment this was
   an interior technical-room reader on a peer Miniserver in the Trust cluster.
 
@@ -42,7 +42,7 @@ UUID.
 ### 2. Five-card dry run — PASSED
 
 ```bash
-python loxone_bulk_enroll.py --dry-run --names test-names.txt
+python loxone_bulk_enroll.py --dry-run --names docs/example-roster.txt
 ```
 
 Proves the two things that matter most:
@@ -58,7 +58,7 @@ Nothing written to the Miniserver during this step.
 ### 3. Same five cards, live — PASSED
 
 ```bash
-python loxone_bulk_enroll.py --names test-names.txt --user-uuid <target>
+python loxone_bulk_enroll.py --names docs/example-roster.txt --user-uuid <target>
 ```
 
 Proves: `addusernfc` is accepted by svc.cardenroll's HTTP basic auth. No token
@@ -73,7 +73,7 @@ name is correct as sent.
 ### 4. Re-tap one of the enrolled cards — PASSED
 
 ```bash
-python loxone_bulk_enroll.py --dry-run --names test-names.txt --user-uuid <target>
+python loxone_bulk_enroll.py --dry-run --names docs/example-roster.txt --user-uuid <target>
 ```
 
 Then tap an already-enrolled card. The pending queue does not advance.
