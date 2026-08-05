@@ -28,7 +28,10 @@ COPY loxone_bulk_enroll.py ./
 
 # `[web]` extra pulls fastapi/uvicorn/etc. Python 3.12 doesn't need the
 # legacy-cgi shim (that's a 3.13+/3.14 problem).
-RUN pip install --no-cache-dir -e '.[web]'
+# `--root-user-action=ignore` silences pip's generic "you're root" warning
+# — expected and harmless during an image build; the runtime user is
+# switched to `autolox` below.
+RUN pip install --no-cache-dir --root-user-action=ignore -e '.[web]'
 
 # The SQLite DB lives here — bind-mount or named-volume this in
 # compose so it survives container recreation.
