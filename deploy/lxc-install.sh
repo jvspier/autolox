@@ -49,11 +49,17 @@ fi
 mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$CONFIG_DIR"
 
 say "cloning / updating repo at $INSTALL_DIR"
+# git 2.35+ refuses to operate on a repo whose .git dir isn't owned by
+# the current user. During updates the checkout is autolox-owned but
+# we're running as root, so we tell git this specific path is safe.
+# `-c safe.directory=` is scoped per-invocation, doesn't pollute the
+# persistent config.
+GIT_SAFE=(-c "safe.directory=$INSTALL_DIR")
 if [[ -d "$INSTALL_DIR/.git" ]]; then
-    git -C "$INSTALL_DIR" fetch origin "$BRANCH"
-    git -C "$INSTALL_DIR" reset --hard "origin/$BRANCH"
+    git "${GIT_SAFE[@]}" -C "$INSTALL_DIR" fetch origin "$BRANCH"
+    git "${GIT_SAFE[@]}" -C "$INSTALL_DIR" reset --hard "origin/$BRANCH"
 else
-    git clone --branch "$BRANCH" "$REPO" "$INSTALL_DIR"
+    git "${GIT_SAFE[@]}" clone --branch "$BRANCH" "$REPO" "$INSTALL_DIR"
 fi
 
 say "installing Python dependencies into venv"
