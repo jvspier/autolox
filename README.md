@@ -8,7 +8,7 @@ it captures the tag ID off the state stream, binds it to the next name in a
 roster, moves on.
 
 Written for a seasonal 200-300-worker enrolment cycle, but useful anywhere
-you'd otherwise be clicking "NFC Tag aanleren" 250 times.
+you'd otherwise be clicking "Learn NFC Tag" 250 times.
 
 ## Two ways to run it
 

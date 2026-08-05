@@ -4,7 +4,7 @@ Rules from docs/workflow.md, decided by the operator (not this code):
 
 - lowercase
 - spaces become dots
-- tussenvoegsels (nl: "de", "van", "der", ...) are kept and dotted
+- name particles ("de", "van", "der", ...) are kept and dotted
 - accents folded to plain ASCII via `unidecode` — this is the point where
   `unicodedata.normalize('NFKD', ...)` would fail: it mangles Łukasz to ukasz,
   ø to nothing, đ to d only inconsistently. `unidecode` handles all of them.

@@ -20,7 +20,7 @@ credentials with no expiry dates to get wrong. It also means the tool never has 
 create or delete users - it only ever attaches tags to an existing one.
 
 The name varies by season and is chosen by whoever runs it - `temp.xmas`,
-`temp.moederdag`, etc. **Therefore the target user must be selected at runtime from a
+`temp.mothersday`, etc. **Therefore the target user must be selected at runtime from a
 dropdown populated by `getuserlist2`, never hardcoded or typed as a UUID.**
 
 Note: Loxone does not care about the tag name at all, only the tag ID. The name exists
@@ -44,7 +44,7 @@ Backoffice holds `John Smith`. Loxone gets `john.smith`.
 | Rule | Example |
 |---|---|
 | Lowercase, dot between every part | `John Smith` → `john.smith` |
-| Tussenvoegsels kept and dotted | `Anne de Wit` → `anne.de.wit` |
+| Name particles kept and dotted (e.g. `de`, `van`, `der`) | `Anne de Wit` → `anne.de.wit` |
 | Accents folded to ASCII | `José` → `jose` |
 | Dash preserved | `Anne-Marie Bakker` → `anne-marie.bakker` |
 | Collision: append a digit | second `jan.jansen` → `jan.jansen2` |
