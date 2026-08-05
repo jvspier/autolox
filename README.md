@@ -70,6 +70,7 @@ python loxone_bulk_enroll.py --dry-run \
 ```
 
 Drop `--dry-run` (or untick "Dry run" in the web UI) to actually bind.
+Full CLI flag reference in [docs/cli.md](docs/cli.md).
 
 ## What's in the box
 
@@ -79,7 +80,8 @@ Drop `--dry-run` (or untick "Dry run" in the web UI) to actually bind.
   workflow
 - `loxone_bulk_enroll.py` — the CLI
 - `docs/` — Loxone protocol notes, workflow reasoning, phase-1 verification
-  record, phase-3 spec
+  record, phase-3 spec, [CLI reference](docs/cli.md), and deployment
+  guides ([Docker](docs/deploy-docker.md) / [LXC](docs/deploy-lxc.md))
 
 ## Status
 
