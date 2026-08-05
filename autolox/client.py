@@ -41,12 +41,21 @@ ERROR_IDS: dict[str, str] = {
 
 @dataclass(frozen=True)
 class Reader:
-    """One NfcCodeTouch control from LoxAPP3.json."""
+    """One NfcCodeTouch control from LoxAPP3.json.
+
+    `owner_host` is the Miniserver LAN address that reported this reader in
+    its own LoxAPP3.json. Non-admin users on a Trust cluster see only their
+    owning Miniserver's controls in each per-user LoxAPP3.json, so the
+    hosts we discover the reader from IS its owner for our purposes.
+    Reader-scoped commands (start_learn, stop_learn, state subscription)
+    must route to this host.
+    """
     uuid_action: str
     name: str
     room: str
     learn_state_uuid: str  # nfcLearnResult state UUID; where tag IDs arrive
     device_state_uuid: str | None
+    owner_host: str
 
 
 @dataclass(frozen=True)
@@ -84,88 +93,139 @@ class TagEvent:
 class LoxoneClient:
     """Thin async client for the enrolment workflow.
 
-    Two hosts are supported to accommodate Loxone Trust clusters:
-    - `reader_host` receives NFC learn-mode commands and hosts the state
-      stream websocket. Must be the Miniserver that physically owns the
-      target reader (Tree devices only respond on their owning Miniserver).
+    Reader ops go to multiple hosts to support Loxone Trust clusters:
+    - `reader_hosts` is a list of Miniserver LAN addresses. `find_readers()`
+      queries all of them and tags each reader with the host that reported
+      it. Reader-scoped commands (start_learn, stop_learn, state stream)
+      route to that owner host.
     - `user_host` receives `getuserlist2`, `getuser`, and `addusernfc`.
       Should be the Miniserver where the Trust users live. Empirically
       `getuser/{name}` returns 404 when queried on a peer for a user local
       to another Miniserver, so this routing distinction matters.
 
-    If `user_host` is omitted, both operations use `reader_host` (backward
-    compatible for standalone Miniservers or single-host testing).
+    If `user_host` is omitted, user ops use the first reader host — fine
+    for a single-Miniserver install.
 
     Usage:
-        async with LoxoneClient(reader_host="192.0.2.10",
-                                 user_host="192.0.2.1", ...) as c:
-            readers = await c.find_readers()
-            await c.start_learn(readers[0].uuid_action)
+        async with LoxoneClient(
+            reader_hosts=["192.0.2.10", "192.0.2.11"],
+            user_host="192.0.2.1", ...,
+        ) as c:
+            readers = await c.find_readers()  # union across all hosts
+            await c.start_learn(readers[0])   # routes to that reader's owner
             ...
     """
 
-    def __init__(self, reader_host: str, user: str, password: str,
-                 visu_password: str | None = None, *,
+    def __init__(self, reader_hosts: list[str] | str, user: str,
+                 password: str, visu_password: str | None = None, *,
                  user_host: str | None = None,
                  timeout: float = 10.0):
-        self._host = reader_host
-        self._user_host = user_host or reader_host
+        # accept either a single string (legacy) or a list of hosts
+        if isinstance(reader_hosts, str):
+            reader_hosts = [reader_hosts]
+        if not reader_hosts:
+            raise ValueError("at least one reader host is required")
+        self._reader_hosts: list[str] = list(reader_hosts)
+        self._user_host = user_host or self._reader_hosts[0]
         self._user = user
         self._visu = visu_password
-        # httpx client for reader ops (NFC commands, structure discovery,
-        # secured commands, and the initial getPublicKey for the websocket
-        # handshake — all Miniserver-local operations).
-        self._http = httpx.AsyncClient(
-            base_url=f"http://{reader_host}",
-            auth=(user, password),
-            timeout=timeout,
-        )
-        # httpx client for user ops. When the two hosts are equal this is
-        # a separate client instance but functionally identical — the
-        # small overhead beats branching every call.
+        # One httpx.AsyncClient per reader host — reader-scoped operations
+        # route to the reader's owner. `structure()`, secured commands, and
+        # the initial `getPublicKey` for the websocket handshake all pick
+        # the client per host.
+        self._reader_http: dict[str, httpx.AsyncClient] = {
+            h: httpx.AsyncClient(base_url=f"http://{h}",
+                                  auth=(user, password), timeout=timeout)
+            for h in self._reader_hosts
+        }
+        # Separate httpx client for user ops. Even when the two hosts
+        # overlap this is a distinct client instance — the small overhead
+        # beats branching every call.
         self._user_http = httpx.AsyncClient(
             base_url=f"http://{self._user_host}",
             auth=(user, password),
             timeout=timeout,
         )
 
+    def _http_for(self, host: str) -> httpx.AsyncClient:
+        """Return the reader-httpx client for a given host.
+
+        Callers always pass a host that came out of `find_readers()` (so
+        it's already in `_reader_hosts`). If a caller passes an unknown
+        host it's a programming error — raise loudly.
+        """
+        c = self._reader_http.get(host)
+        if c is None:
+            raise ValueError(
+                f"host {host!r} is not in reader_hosts "
+                f"({self._reader_hosts}) — check config")
+        return c
+
     async def __aenter__(self) -> "LoxoneClient":
         return self
 
     async def __aexit__(self, *exc) -> None:
-        await self._http.aclose()
+        for c in self._reader_http.values():
+            await c.aclose()
         await self._user_http.aclose()
 
     async def aclose(self) -> None:
-        await self._http.aclose()
+        for c in self._reader_http.values():
+            await c.aclose()
         await self._user_http.aclose()
 
     # ---- structure & discovery -----------------------------------------
 
-    async def structure(self) -> dict:
-        r = await self._http.get("/data/LoxAPP3.json")
+    async def structure(self, host: str | None = None) -> dict:
+        """Fetch LoxAPP3.json from a specific host (or the first reader
+        host if unspecified). Non-admin users get a per-Miniserver view
+        limited to controls on that host — this is why multi-host queries
+        are the whole point of `find_readers()`."""
+        h = host or self._reader_hosts[0]
+        r = await self._http_for(h).get("/data/LoxAPP3.json")
         r.raise_for_status()
         return r.json()
 
-    async def find_readers(self, structure: dict | None = None) -> list[Reader]:
-        s = structure or await self.structure()
-        rooms = s.get("rooms") or {}
+    async def find_readers(self) -> list[Reader]:
+        """Discover NfcCodeTouch readers across every configured host.
+
+        Each Miniserver's LoxAPP3.json under svc.cardenroll's permissions
+        contains only its own-hosted controls (not the cluster-merged view
+        that admin accounts see). We fetch from all hosts in parallel,
+        dedupe by uuidAction, and tag each reader with the host that
+        reported it — that's its owner for command routing."""
+        results = await asyncio.gather(*(
+            self.structure(host=h) for h in self._reader_hosts
+        ), return_exceptions=True)
+
+        seen: set[str] = set()
         out: list[Reader] = []
-        for uuid, ctrl in (s.get("controls") or {}).items():
-            if ctrl.get("type") != "NfcCodeTouch":
+        for host, res in zip(self._reader_hosts, results):
+            if isinstance(res, Exception):
+                _LOG.warning("could not fetch LoxAPP3.json from %s: %s",
+                             host, res)
                 continue
-            states = ctrl.get("states") or {}
-            learn = states.get("nfcLearnResult")
-            if not learn:
-                continue  # can't enrol on a reader we can't listen to
-            room = rooms.get(ctrl.get("room"), {}).get("name", "")
-            out.append(Reader(
-                uuid_action=ctrl.get("uuidAction", uuid),
-                name=ctrl.get("name", "?"),
-                room=room,
-                learn_state_uuid=learn,
-                device_state_uuid=states.get("deviceState"),
-            ))
+            rooms = res.get("rooms") or {}
+            for uuid, ctrl in (res.get("controls") or {}).items():
+                if ctrl.get("type") != "NfcCodeTouch":
+                    continue
+                states = ctrl.get("states") or {}
+                learn = states.get("nfcLearnResult")
+                if not learn:
+                    continue
+                uuid_action = ctrl.get("uuidAction", uuid)
+                if uuid_action in seen:
+                    continue  # already found on an earlier host in the list
+                seen.add(uuid_action)
+                room = rooms.get(ctrl.get("room"), {}).get("name", "")
+                out.append(Reader(
+                    uuid_action=uuid_action,
+                    name=ctrl.get("name", "?"),
+                    room=room,
+                    learn_state_uuid=learn,
+                    device_state_uuid=states.get("deviceState"),
+                    owner_host=host,
+                ))
         return out
 
     async def get_user_detail(self, name: str) -> dict:
@@ -271,25 +331,29 @@ class LoxoneClient:
 
     # ---- secured commands (HTTP path) ----------------------------------
 
-    async def _visu_signed(self, uuid_action: str, cmd: str) -> str:
-        """Fetch a fresh salt and build a signed jdev/sps/ios/... URL."""
+    async def _visu_signed(self, host: str, uuid_action: str, cmd: str) -> str:
+        """Fetch a fresh salt from `host` and build a signed
+        `jdev/sps/ios/...` URL. Salt is per-host per-user."""
         if not self._visu:
             raise LoxoneError("visu password is required for secured commands")
-        r = await self._http.get(f"/jdev/sys/getvisusalt/{self._user}")
+        r = await self._http_for(host).get(
+            f"/jdev/sys/getvisusalt/{self._user}")
         r.raise_for_status()
         val = r.json()["LL"]["value"]
         h = visu_hash(self._visu, val["key"], val["salt"],
                        val.get("hashAlg", "SHA256"))
         return f"/jdev/sps/ios/{h}/{uuid_action}/{cmd}"
 
-    async def start_learn(self, uuid_action: str) -> None:
-        url = await self._visu_signed(uuid_action, "nfc/startlearn")
-        r = await self._http.get(url)
+    async def start_learn(self, reader: Reader) -> None:
+        url = await self._visu_signed(reader.owner_host, reader.uuid_action,
+                                       "nfc/startlearn")
+        r = await self._http_for(reader.owner_host).get(url)
         _check_ll(r, "startlearn")
 
-    async def stop_learn(self, uuid_action: str) -> None:
-        url = await self._visu_signed(uuid_action, "nfc/stoplearn")
-        r = await self._http.get(url)
+    async def stop_learn(self, reader: Reader) -> None:
+        url = await self._visu_signed(reader.owner_host, reader.uuid_action,
+                                       "nfc/stoplearn")
+        r = await self._http_for(reader.owner_host).get(url)
         _check_ll(r, "stoplearn")
 
     # ---- binding -------------------------------------------------------
@@ -312,7 +376,11 @@ class LoxoneClient:
         handshake raise LoxoneError; errors during subscription raise
         websockets.exceptions or LoxoneError.
         """
-        pk_resp = await self._http.get("/jdev/sys/getPublicKey")
+        # State stream is routed to the reader's owning Miniserver — the
+        # peer where the underlying Tree device lives. Its public key
+        # (used for the AES session-key exchange) is host-specific.
+        pk_resp = await self._http_for(reader.owner_host).get(
+            "/jdev/sys/getPublicKey")
         pk_resp.raise_for_status()
         pk = pk_resp.json()["LL"]["value"]
         public_key_pem = normalise_public_key(pk)
@@ -320,7 +388,7 @@ class LoxoneClient:
         session = Session()
         rsa_blob = rsa_encrypt_session_key(public_key_pem, session.key, session.iv)
 
-        ws_url = f"ws://{self._host}/ws/rfc6455"
+        ws_url = f"ws://{reader.owner_host}/ws/rfc6455"
         async with websockets.connect(
             ws_url, subprotocols=["remotecontrol"], max_size=2**22,
         ) as ws:

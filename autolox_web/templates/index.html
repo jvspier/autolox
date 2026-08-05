@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>autolox — NFC card enrolment</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+    <div class="topbar-left">
+        <button class="history-btn" id="hamburger-btn" aria-label="Open history"
+                title="Session history">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/>
+                <polyline points="12 7 12 12 15.5 14"/>
+            </svg>
+            <span class="history-btn-label">History</span>
+        </button>
+    </div>
+    <div class="topbar-center"><span class="workspace">autolox</span></div>
+    <div class="topbar-right">
+        <span class="status-dot" id="status-dot" title="idle"></span>
+        <span class="title" id="step-title">Setup</span>
+    </div>
+</header>
+
+<!-- History slide-out panel + scrim -->
+<div id="history-scrim" class="history-scrim" hidden></div>
+<aside id="history-panel" class="history-panel" hidden>
+    <div class="history-header">
+        <button class="history-back" id="history-back" hidden aria-label="Back">←</button>
+        <h2 id="history-title">History</h2>
+        <button class="history-close" id="history-close" aria-label="Close">×</button>
+    </div>
+    <div class="history-body">
+        <div id="history-list" class="history-list"></div>
+        <div id="history-detail" class="history-detail" hidden></div>
+    </div>
+</aside>
+
+<main class="canvas">
+
+<!-- ==================== SCREEN: CONNECT ERROR ==================== -->
+<section id="screen-connect-error" class="screen">
+    <div class="connect-error">
+        <div class="connect-error-icon">⚠</div>
+        <h2>Can't reach the Miniserver</h2>
+        <p class="connect-error-message" id="connect-error-msg"></p>
+        <p class="field-help">
+            Check that autolox's <code>.env</code> has the right
+            <code>LOXONE_HOSTS</code> / <code>LOXONE_USER_HOST</code>, that
+            the Miniserver is reachable on the LAN, and that
+            <code>svc.cardenroll</code>'s credentials are correct.
+        </p>
+        <button class="btn primary" id="btn-retry-connect">Retry</button>
+    </div>
+</section>
+
+<!-- ==================== SCREEN: SETUP ==================== -->
+<section id="screen-setup" class="screen active">
+    <h2 class="section-heading">Setup</h2>
+
+    <div class="card">
+        <label class="field-label" for="reader-select">NFC Code Touch</label>
+        <select id="reader-select" class="select"></select>
+        <p class="field-help" id="reader-help">Loading readers…</p>
+    </div>
+
+    <div class="card">
+        <label class="field-label" for="user-select">Target Loxone user</label>
+        <input type="text" id="user-filter" class="text-input" placeholder="filter…" autocomplete="off">
+        <select id="user-select" class="select" size="8"></select>
+        <p class="field-help" id="user-help">Cards will be attached to this user. Pick carefully.</p>
+    </div>
+
+    <div class="card">
+        <label class="field-label" for="roster-input">Roster (one name per line)</label>
+        <div class="roster-helpers">
+            <button type="button" class="chip-btn" id="roster-trim"
+                    title="Remove blank lines and leading/trailing whitespace">
+                Trim blank lines
+            </button>
+            <button type="button" class="chip-btn" id="roster-dedup"
+                    title="Remove duplicate lines (case-insensitive, ignores whitespace)">
+                Remove duplicates
+            </button>
+            <button type="button" class="chip-btn" id="roster-sort"
+                    title="Sort alphabetically. May break tap-order if that matters to you.">
+                Sort A→Z
+            </button>
+            <span class="roster-count" id="roster-count"></span>
+        </div>
+        <textarea id="roster-input" class="textarea" rows="10" placeholder="Jan Jansen&#10;Anne de Wit&#10;Anne-Marie Bakker"></textarea>
+    </div>
+
+    <div class="card row">
+        <label class="checkbox">
+            <input type="checkbox" id="dry-run-toggle" checked>
+            <span>Dry run — capture tags, write nothing to Loxone</span>
+        </label>
+    </div>
+
+    <div class="card row">
+        <label class="checkbox">
+            <input type="checkbox" id="fresh-toggle">
+            <span>Fresh session — ignore local pre-load history for this user
+                <em class="hint">(use when you've cleared cards from Loxone
+                    manually and want to re-enrol them)</em>
+            </span>
+        </label>
+    </div>
+
+    <div class="actions">
+        <button id="btn-review" class="btn primary" disabled>Continue → Review</button>
+    </div>
+</section>
+
+<!-- ==================== SCREEN: REVIEW ==================== -->
+<section id="screen-review" class="screen">
+    <h2 class="section-heading">Review</h2>
+
+    <div class="card summary">
+        <div class="summary-row"><span>Reader</span><span id="review-reader" class="value"></span></div>
+        <div class="summary-row"><span>Target user</span><span id="review-user" class="value"></span></div>
+        <div class="summary-row"><span>Mode</span><span id="review-mode" class="value"></span></div>
+        <div class="summary-row"><span>Roster</span><span id="review-count" class="value"></span></div>
+        <div class="summary-row"><span>Already bound</span><span id="review-preload" class="value"></span></div>
+    </div>
+
+    <div class="card">
+        <h3 class="card-subheading">Name transformation preview</h3>
+        <p class="field-help">Roster names on the left become the Loxone names on the right. Rows with warnings are marked <span class="warn-mark">!</span> — review before continuing.</p>
+        <table class="transform-table" id="transform-table">
+            <thead><tr><th></th><th>Roster</th><th>→</th><th>Loxone name</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div class="actions">
+        <button id="btn-back-to-setup" class="btn secondary">← Back</button>
+        <button id="btn-arm" class="btn primary">Arm reader & begin</button>
+    </div>
+</section>
+
+<!-- ==================== SCREEN: ENROL ==================== -->
+<section id="screen-enrol" class="screen">
+    <h2 class="section-heading">Enrolling</h2>
+
+    <div class="enrol-layout">
+        <div class="live-panel">
+            <div class="card next-card">
+                <div class="next-label">next card is for</div>
+                <div class="next-name" id="next-name">—</div>
+                <div class="next-progress">
+                    <span id="progress-done">0</span> /
+                    <span id="progress-total">0</span> bound
+                    <span id="progress-remaining" class="remaining"></span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-subheading">Live tap log</h3>
+                <ul class="tap-log" id="tap-log"></ul>
+            </div>
+        </div>
+
+        <div class="roster-panel card">
+            <h3 class="card-subheading">Roster</h3>
+            <ul class="roster-list" id="roster-list"></ul>
+        </div>
+    </div>
+
+    <div class="actions">
+        <label class="checkbox focus-toggle-label">
+            <input type="checkbox" id="focus-toggle" checked>
+            <span>Focus mode <em class="hint">(big "next card" overlay, legible across the room)</em></span>
+        </label>
+        <button id="btn-stop" class="btn danger">Stop</button>
+    </div>
+</section>
+
+<!-- Confirmation dialog. Reusable — content set by JS. -->
+<div id="confirm-scrim" class="confirm-scrim" hidden>
+    <div class="confirm-card" role="dialog" aria-modal="true">
+        <div class="confirm-title" id="confirm-title">Are you sure?</div>
+        <div class="confirm-message" id="confirm-message"></div>
+        <div class="confirm-actions">
+            <button id="confirm-cancel" class="btn secondary">Cancel</button>
+            <button id="confirm-ok" class="btn danger">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Focus-mode overlay for enrolment. Rendered outside the .screen so
+     the backdrop-filter blur applies to the whole document body. -->
+<div id="focus-overlay" class="focus-overlay" hidden>
+    <div class="focus-card">
+        <button class="focus-dismiss" id="focus-dismiss"
+                title="Dismiss overlay (Esc). Session keeps running."
+                aria-label="Dismiss overlay">×</button>
+        <div class="focus-prompt">Scan the card for:</div>
+        <div class="focus-name" id="focus-name">—</div>
+        <div class="focus-next" id="focus-next"></div>
+        <div class="focus-progress" id="focus-progress"></div>
+        <div class="focus-actions">
+            <button id="btn-focus-stop" class="btn danger">Stop session</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== SCREEN: SUMMARY ==================== -->
+<section id="screen-summary" class="screen">
+    <h2 class="section-heading">Summary</h2>
+
+    <div class="card summary">
+        <div class="summary-row"><span>Session</span><span id="summary-status" class="value"></span></div>
+        <div class="summary-row"><span>Bound</span><span id="summary-bound" class="value ok"></span></div>
+        <div class="summary-row"><span>Skipped</span><span id="summary-skipped" class="value"></span></div>
+        <div class="summary-row"><span>Errored</span><span id="summary-errored" class="value err"></span></div>
+        <div class="summary-row"><span>Remaining</span><span id="summary-remaining" class="value"></span></div>
+    </div>
+
+    <div class="actions">
+        <button id="btn-new-session" class="btn primary">New session</button>
+    </div>
+</section>
+
+</main>
+
+<footer class="stepnav">
+    <div class="stepnav-dot" data-step="setup"><span class="stepnav-num">1</span><span>Setup</span></div>
+    <div class="stepnav-dot" data-step="review"><span class="stepnav-num">2</span><span>Review</span></div>
+    <div class="stepnav-dot" data-step="enrol"><span class="stepnav-num">3</span><span>Enrol</span></div>
+    <div class="stepnav-dot" data-step="summary"><span class="stepnav-num">4</span><span>Summary</span></div>
+</footer>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

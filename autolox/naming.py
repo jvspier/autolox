@@ -63,8 +63,9 @@ def transform(roster: str) -> TransformedName:
     lower = folded.lower()
     dotted = re.sub(r"\s+", ".", lower)
 
-    if "." not in dotted:
-        warnings.append("single-word entry (no space in roster form)")
+    # A single-word roster entry (no space -> no dot in the result) used
+    # to warn — but it's a legitimate input (nicknames, mononyms,
+    # deliberate short usernames), so it's silently accepted now.
 
     # Anything left that isn't a-z 0-9 . - is a problem.
     if not _ALLOWED.match(dotted):

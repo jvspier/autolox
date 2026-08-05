@@ -11,6 +11,10 @@ build/
 dist/
 
 # runtime output
+autolox.db
+autolox.db-journal
+autolox.db-wal
+autolox.db-shm
 enrolled.csv
 lox_token.cfg
 

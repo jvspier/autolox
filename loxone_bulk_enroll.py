@@ -18,6 +18,10 @@ variables, or a getpass prompt (in that priority). Never from argv.
   LOXONE_CODE_TOUCH_UUID   default reader UUID for enrolment
   LOXONE_TARGET_USER_UUID  default target user UUID
 
+Persistence goes to a local SQLite database (default `./autolox.db`,
+override via AUTOLOX_DB). Set AUTOLOX_CSV_EXPORT to also append each
+binding to a CSV file as a human-readable export.
+
 Usage:
     # 1. discover readers visible to this account
     python loxone_bulk_enroll.py --list
@@ -35,18 +39,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import csv
 import getpass
 import logging
 import os
 import signal
 import sys
-from datetime import datetime
 
 from dotenv import load_dotenv
 
 from autolox.client import ERROR_IDS, LoxoneClient, LoxoneError, TagEvent
 from autolox.naming import TransformedName, transform_all
+from autolox.storage import Store
 
 log = logging.getLogger("enrol")
 
@@ -56,30 +59,10 @@ def load_names(path: str) -> list[str]:
         return [line.strip() for line in fh if line.strip()]
 
 
-def _load_bound_from_csv(csv_path: str, user_uuid: str) -> set[str]:
-    """Read prior 'bound' rows from the enrolment journal and return the
-    tag IDs previously bound.
-
-    CSV columns (positional, no header): timestamp, roster, loxone, tag_id,
-    tag_name, status, user_uuid?. The user_uuid column was added in a later
-    version — rows without it are treated as legacy and included
-    conservatively (better a false-positive skip than a silent rebind).
-    """
-    import os as _os
-    if not _os.path.exists(csv_path):
-        return set()
-    out: set[str] = set()
-    with open(csv_path, encoding="utf-8", newline="") as fh:
-        for row in csv.reader(fh):
-            if len(row) < 6 or row[5] != "bound":
-                continue
-            tag_id = row[3].strip()
-            if not tag_id:
-                continue
-            row_user = row[6] if len(row) >= 7 else ""
-            if not row_user or row_user == user_uuid:
-                out.add(tag_id)
-    return out
+def _parse_hosts(raw: str) -> list[str]:
+    """Parse `1.2.3.4,5.6.7.8` into `['1.2.3.4', '5.6.7.8']`. Whitespace
+    around commas tolerated. Empty input returns an empty list."""
+    return [h.strip() for h in raw.split(",") if h.strip()]
 
 
 def resolve_credentials(prompt: bool) -> tuple[str, str, str]:
@@ -128,29 +111,38 @@ async def list_users(client: LoxoneClient, needle: str | None) -> int:
 
 
 class Enroller:
-    """One enrolment session against one reader."""
+    """One enrolment session against one reader.
 
-    def __init__(self, client: LoxoneClient, reader, names: list[TransformedName],
-                 out_path: str, dry_run: bool, force: bool,
-                 user_uuid: str | None, already_bound: set[str] | None = None):
+    Persistence goes through `store` (SQLite). No file handles here.
+    """
+
+    def __init__(self, client: LoxoneClient, reader,
+                 names: list[TransformedName],
+                 store: Store, session_id: str,
+                 dry_run: bool, force: bool,
+                 user_uuid: str | None,
+                 already_bound: set[str] | None = None):
         self.client = client
         self.reader = reader
         self.pending: list[TransformedName] = list(names)
+        self.store = store
+        self.session_id = session_id
         self.dry_run = dry_run
         self.force = force
         self.user_uuid = user_uuid
         self.last_tag: str | None = None
         # Tag IDs already known to be bound to the target user. Seeded from
-        # the Miniserver's user record at session start, augmented as we
-        # bind more cards in this session. Needed because the reader's
-        # learn-mode state stream doesn't reflect just-made bindings.
+        # the Miniserver's user record at session start AND from the local
+        # DB, augmented as we bind more cards in this session. Needed
+        # because the reader's learn-mode state stream doesn't reflect
+        # just-made bindings.
         self.already_bound: set[str] = set(already_bound or set())
         self.count = 0
-        self._journal = open(out_path, "a", newline="", encoding="utf-8")
-        self._writer = csv.writer(self._journal)
 
     def close(self) -> None:
-        self._journal.close()
+        # Nothing to close now — the Store outlives us. Kept for callers
+        # that still expect the method during the CLI's shutdown path.
+        pass
 
     async def handle(self, ev: TagEvent) -> None:
         # dedupe: state re-fires while the card is on the reader
@@ -169,49 +161,73 @@ class Enroller:
         # long ago (other users' badges) but stale for freshly-bound tags.
         locally_bound = ev.tag_id in self.already_bound
         if (ev.is_assigned or locally_bound) and not self.force:
-            source = ev.tag_name or ev.user_uuid or "target user (this session)"
+            source = ev.tag_name or ev.user_uuid or "target user"
             log.warning("card %s is ALREADY assigned to %s — skipped "
                         "(use --force to rebind)",
                         ev.tag_id, source)
+            self.store.record_binding(
+                session_id=self.session_id,
+                user_uuid=self.user_uuid or "",
+                roster_name="", loxone_name="",
+                tag_id=ev.tag_id, tag_name=ev.tag_name,
+                status="skipped",
+                skip_reason=("already-assigned"
+                             if ev.is_assigned else "locally-bound"),
+            )
             return
 
         if not self.pending:
-            log.info("card %s tapped but the name list is exhausted", ev.tag_id)
+            log.info("card %s tapped but the name list is exhausted",
+                     ev.tag_id)
             return
 
         row = self.pending.pop(0)
         self.count += 1
 
         if self.dry_run:
-            log.info("[dry-run] %3d  %-30s  %s", self.count, row.loxone, ev.tag_id)
+            log.info("[dry-run] %3d  %-30s  %s",
+                     self.count, row.loxone, ev.tag_id)
+            binding_status = "dry-run"
         else:
             try:
-                await self.client.add_user_nfc(self.user_uuid, ev.tag_id, row.loxone)
+                await self.client.add_user_nfc(self.user_uuid, ev.tag_id,
+                                                row.loxone)
             except LoxoneError as e:
                 log.error("addusernfc failed for %s: %s — REQUEUING name",
                           ev.tag_id, e)
-                self.pending.insert(0, row)  # put it back
+                self.pending.insert(0, row)
                 self.count -= 1
                 self.last_tag = None
+                self.store.record_binding(
+                    session_id=self.session_id,
+                    user_uuid=self.user_uuid or "",
+                    roster_name=row.roster, loxone_name=row.loxone,
+                    tag_id=ev.tag_id, tag_name=ev.tag_name,
+                    status="error", skip_reason=str(e),
+                )
                 return
-            log.info("bound     %3d  %-30s  %s", self.count, row.loxone, ev.tag_id)
+            log.info("bound     %3d  %-30s  %s",
+                     self.count, row.loxone, ev.tag_id)
+            binding_status = "bound"
+
         # Track locally so a re-tap in this session is caught even if the
         # reader's state cache hasn't refreshed yet.
         self.already_bound.add(ev.tag_id)
-
-        self._writer.writerow([
-            datetime.now().isoformat(timespec="seconds"),
-            row.roster, row.loxone, ev.tag_id, ev.tag_name,
-            "dry-run" if self.dry_run else "bound",
-            self.user_uuid or "",
-        ])
-        self._journal.flush()
+        self.store.record_binding(
+            session_id=self.session_id,
+            user_uuid=self.user_uuid or "",
+            roster_name=row.roster, loxone_name=row.loxone,
+            tag_id=ev.tag_id, tag_name=ev.tag_name,
+            status=binding_status,
+        )
 
         remaining = len(self.pending)
         if remaining:
-            log.info("          next: %s   (%d to go)", self.pending[0].loxone, remaining)
+            log.info("          next: %s   (%d to go)",
+                     self.pending[0].loxone, remaining)
         else:
-            log.info("          list complete — %d cards enrolled", self.count)
+            log.info("          list complete — %d cards enrolled",
+                     self.count)
 
 
 def preview_and_confirm(rows: list[TransformedName], *, assume_yes: bool) -> bool:
@@ -244,10 +260,10 @@ def preview_and_confirm(rows: list[TransformedName], *, assume_yes: bool) -> boo
     return ans in ("y", "yes")
 
 
-async def rearm_loop(client: LoxoneClient, uuid_action: str, interval: float = 3.0):
+async def rearm_loop(client: LoxoneClient, reader, interval: float = 3.0):
     while True:
         try:
-            await client.start_learn(uuid_action)
+            await client.start_learn(reader)
         except LoxoneError as e:
             log.error("rearm failed: %s", e)
         await asyncio.sleep(interval)
@@ -286,6 +302,7 @@ async def enrol_session(client: LoxoneClient, args, pw: str) -> int:
                   len(unusable))
         return 3
 
+    store = Store()
     already_bound: set[str] = set()
     if args.user_uuid:
         # Path 1: try to fetch from the Miniserver. Fails silently on Trust
@@ -294,34 +311,44 @@ async def enrol_session(client: LoxoneClient, args, pw: str) -> int:
         try:
             from_server = await client.get_user_tags(args.user_uuid)
             already_bound |= from_server
-            log.info("server: target user has %d bound tag(s)", len(from_server))
+            log.info("server: target user has %d bound tag(s)",
+                     len(from_server))
         except LoxoneError as e:
             log.warning("could not fetch existing tags via API: %s", e)
-            log.warning("falling back to local CSV journal for pre-load")
+            log.warning("falling back to local DB for pre-load")
 
-        # Path 2: always also load from the CSV journal. Even when the API
-        # works, the journal covers cards bound in earlier sessions that
-        # might not be visible via getuser routing. Two sources of truth,
-        # unioned. Cheap and idempotent.
-        from_csv = _load_bound_from_csv(args.out, args.user_uuid)
-        new_from_csv = from_csv - already_bound
-        if new_from_csv:
-            log.info("csv: adding %d additional tag(s) from journal", len(new_from_csv))
-        already_bound |= from_csv
+        # Path 2: always also load from the local DB. Covers cards bound in
+        # earlier sessions when the getuser endpoint isn't reachable. Cheap
+        # and idempotent — the two sets are unioned.
+        from_db = store.get_bound_tags(args.user_uuid)
+        new_from_db = from_db - already_bound
+        if new_from_db:
+            log.info("db: adding %d additional tag(s) from local storage",
+                     len(new_from_db))
+        already_bound |= from_db
 
         if already_bound:
             log.info("total: %d tag(s) will be treated as already-assigned",
                      len(already_bound))
         else:
-            log.warning("could not determine any already-bound tags for "
-                        "user %s — re-tapping bound cards will consume names",
-                        args.user_uuid)
+            log.info("no prior bindings for this user — every tap will "
+                     "consume a name")
 
-    enroller = Enroller(client, reader, rows, args.out,
+    # Record this session in the DB. The session record links every
+    # binding together for later summaries and for cross-session
+    # resumability of the "180 done / 70 to go" flow.
+    session = store.create_session(
+        reader_uuid=reader.uuid_action,
+        user_uuid=args.user_uuid or "",
+        roster_size=len(rows),
+    )
+    log.info("session: %s", session.id)
+
+    enroller = Enroller(client, reader, rows, store, session.id,
                         args.dry_run, args.force, args.user_uuid,
                         already_bound=already_bound)
 
-    rearm = asyncio.create_task(rearm_loop(client, reader.uuid_action))
+    rearm = asyncio.create_task(rearm_loop(client, reader))
 
     async def consume():
         async for ev in client.subscribe_tags(reader, pw):
@@ -367,13 +394,21 @@ async def enrol_session(client: LoxoneClient, args, pw: str) -> int:
         # reader stays armed until its hardcoded timeout — as happened
         # 2026-08-04 before this fix.
         try:
-            await asyncio.shield(client.stop_learn(reader.uuid_action))
+            await asyncio.shield(client.stop_learn(reader))
             log.info("stop_learn OK")
         except asyncio.CancelledError:
             log.warning("stop_learn cancelled — reader may still be armed")
         except Exception as e:
             log.warning("stop_learn on shutdown: %s", e)
         enroller.close()
+        # Mark the session finished. 'completed' if we drained the roster,
+        # 'stopped' if the operator interrupted us or the list was longer
+        # than the taps.
+        end_status = ("completed"
+                      if interrupted is False and not enroller.pending
+                      else "stopped")
+        store.end_session(session.id, status=end_status)
+        store.close()
         if interrupted:
             log.info("interrupted by signal.")
 
@@ -382,7 +417,8 @@ async def enrol_session(client: LoxoneClient, args, pw: str) -> int:
 
 async def async_main(args) -> int:
     user, pw, visu = resolve_credentials(prompt=args.prompt)
-    async with LoxoneClient(args.host, user, pw, visu,
+    reader_hosts = _parse_hosts(args.host)
+    async with LoxoneClient(reader_hosts, user, pw, visu,
                              user_host=args.user_host) as c:
         if args.list:
             return await list_readers(c)
@@ -411,10 +447,13 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--host", default=os.getenv("LOXONE_HOST"),
-                   help="Miniserver LAN address (owner of the target reader). "
-                        "Receives NFC learn commands and the state stream. "
-                        "Env: LOXONE_HOST")
+    p.add_argument("--host",
+                   default=os.getenv("LOXONE_HOSTS") or os.getenv("LOXONE_HOST"),
+                   help="Miniserver LAN address(es) for reader ops. Accepts a "
+                        "single host or comma-separated list — each host is "
+                        "queried for its own NfcCodeTouch controls and reader "
+                        "commands route to whichever host reported the reader. "
+                        "Env: LOXONE_HOSTS (list) or LOXONE_HOST (single)")
     p.add_argument("--user-host", default=os.getenv("LOXONE_USER_HOST"),
                    help="Miniserver LAN address to use for user operations "
                         "(getuserlist2, getuser, addusernfc). In a Trust cluster "
@@ -427,8 +466,6 @@ def main() -> int:
                    help="UUID of the target Loxone user for addusernfc. "
                         "Env: LOXONE_TARGET_USER_UUID")
     p.add_argument("--names", help="text file, one name per line, in tap order")
-    p.add_argument("--out", default="enrolled.csv",
-                   help="CSV journal (append-only, default: enrolled.csv)")
     p.add_argument("--list", action="store_true",
                    help="list visible NFC Code Touches and exit")
     p.add_argument("--list-users", action="store_true",
@@ -448,7 +485,8 @@ def main() -> int:
     args = p.parse_args()
 
     if not args.host:
-        p.error("--host is required (or set LOXONE_HOST in .env / environment)")
+        p.error("--host is required (or set LOXONE_HOSTS / LOXONE_HOST in "
+                ".env / environment)")
 
     # sensible default: prompt if stdin is a tty and no env creds
     if not args.prompt and sys.stdin.isatty():
