@@ -14,35 +14,41 @@ you'd otherwise be clicking "Learn NFC Tag" 250 times.
 
 <sub>Click any thumbnail to open the full-size version.</sub>
 
-<a href="docs/screenshots/startpage.png"><img src="docs/screenshots/startpage.png" width="640" alt="Setup screen"></a>
+<p align="center">
+  <a href="docs/screenshots/startpage.png"><img src="docs/screenshots/startpage.png" width="320" alt="Setup screen"></a>
+</p>
 
-Setup: pick a reader from the dropdown, pick a target Loxone user, paste
-the roster of names to enrol.
+<p align="center">Setup: pick a reader from the dropdown, pick a target Loxone user, paste the roster of names to enrol.</p>
 
-<a href="docs/screenshots/example-session.png"><img src="docs/screenshots/example-session.png" width="640" alt="Review"></a>
+<p align="center">
+  <a href="docs/screenshots/example-session.png"><img src="docs/screenshots/example-session.png" width="320" alt="Review"></a>
+</p>
 
-Review: each roster name is transformed to the Loxone-form
-(`Jan Jansen` → `jan.jansen`), warnings surfaced per row before anything
-is written to Loxone.
+<p align="center">Review: each roster name is transformed to the Loxone-form (<code>Jan Jansen</code> → <code>jan.jansen</code>), warnings surfaced per row before anything is written to Loxone.</p>
 
-<a href="docs/screenshots/learning-mode.png"><img src="docs/screenshots/learning-mode.png" width="640" alt="Enrolment in progress"></a>
+<p align="center">
+  <a href="docs/screenshots/learning-mode.png"><img src="docs/screenshots/learning-mode.png" width="320" alt="Enrolment in progress"></a>
+</p>
 
-Enrolling: the current card's name shown in big letters — legible from
-across the room — with a live tap log and per-row roster status alongside.
+<p align="center">Enrolling: the current card's name shown in big letters — legible from across the room — with a live tap log and per-row roster status alongside.</p>
 
-<a href="docs/screenshots/summary.png"><img src="docs/screenshots/summary.png" width="640" alt="Session summary"></a>
+<p align="center">
+  <a href="docs/screenshots/summary.png"><img src="docs/screenshots/summary.png" width="320" alt="Session summary"></a>
+</p>
 
-Summary after a completed session: bound / skipped / errored counts.
+<p align="center">Summary after a completed session: bound / skipped / errored counts.</p>
 
-<a href="docs/screenshots/history-tab.png"><img src="docs/screenshots/history-tab.png" width="640" alt="Session history"></a>
+<p align="center">
+  <a href="docs/screenshots/history-tab.png"><img src="docs/screenshots/history-tab.png" width="320" alt="Session history"></a>
+</p>
 
-History slide-out: every past session with target user, timestamp, and
-counts. Sessions that ended prematurely offer a one-click resume.
+<p align="center">History slide-out: every past session with target user, timestamp, and counts. Sessions that ended prematurely offer a one-click resume.</p>
 
-<a href="docs/screenshots/history-session.png"><img src="docs/screenshots/history-session.png" width="640" alt="Per-session detail"></a>
+<p align="center">
+  <a href="docs/screenshots/history-session.png"><img src="docs/screenshots/history-session.png" width="320" alt="Per-session detail"></a>
+</p>
 
-Session detail with a roster audit: every intended enrollee shown against
-what actually happened (bound / dry-run / skipped / pending).
+<p align="center">Session detail with a roster audit: every intended enrollee shown against what actually happened (bound / dry-run / skipped / pending).</p>
 
 ## Two ways to run it
 
