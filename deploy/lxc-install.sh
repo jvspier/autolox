@@ -88,6 +88,13 @@ install -m 644 "$INSTALL_DIR/deploy/autolox.service" /etc/systemd/system/autolox
 systemctl daemon-reload
 systemctl enable autolox.service
 
+# If the service was already running (i.e. this is an update, not a
+# fresh install), restart it so it picks up the new code.
+if systemctl is-active --quiet autolox.service; then
+    say "restarting autolox (service was running)"
+    systemctl restart autolox.service
+fi
+
 cat <<EOF
 
 $(tput bold 2>/dev/null || true)Install complete.$(tput sgr0 2>/dev/null || true)
