@@ -4,16 +4,6 @@ Iteration 1 of a phased build-out. Goal: a working browser UI that mirrors what
 the CLI does today, running as a FastAPI service that can be deployed to an LXC
 container on Proxmox.
 
-**Camera / OCR (originally iteration 3): abandoned 2026-08-05.** Prototyped
-with Tesseract.js client-side; recognition quality on glossy printed PVC
-cards under office lighting was well below what would make the feature
-worth its speed cost. The current tap-in-order flow is fast enough that
-the camera-verifier's original justification (catch shuffled cards) doesn't
-justify the added latency + failure modes. If we ever revisit: server-side
-cloud OCR (Google Vision / AWS Textract), or QR/barcode on the card
-artwork, are the two viable paths — both replace OCR entirely rather than
-tuning it.
-
 Read this doc, mark it up with any changes / questions before implementation
 starts. Iteration boundaries are deliberate — resist creep.
 
@@ -34,7 +24,6 @@ starts. Iteration boundaries are deliberate — resist creep.
 
 ## Non-goals (explicitly deferred)
 
-- Camera / OCR verifier — iteration 3.
 - Multi-operator sessions — iteration 1 assumes a single-operator single-tab
   model. Second concurrent operator is undefined behaviour.
 - Authentication on the web app itself. Behind a private network / LXC-only
@@ -237,7 +226,6 @@ Loxone Web UI 17+ style. Not a copy — recognisable family resemblance.
   advance by finishing / stopping).
 - **State colors** on enrolment cards:
   - grey — waiting
-  - amber — matched, ready to tap (iteration 3)
   - green — bound
   - red — error / already-assigned
 - **Typography**: system font stack (`-apple-system, "Segoe UI", Inter, ...`).
@@ -260,9 +248,9 @@ Browser opens `http://localhost:8000`.
 uvicorn autolox_web.app:app --host 0.0.0.0 --port 8000
 ```
 
-Behind an internal reverse proxy with a real TLS cert (needed later for
-`getUserMedia` in iteration 3; harmless in iteration 1). Systemd unit file
-ships with the code so `systemctl enable autolox` works in the container.
+Optionally behind an internal reverse proxy with a real TLS cert for
+LAN-wide access. Systemd unit file ships with the code so `systemctl
+enable autolox` works in the container.
 
 ## Dependencies added
 

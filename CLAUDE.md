@@ -25,11 +25,8 @@ card is caught by the safety check.
 
 The code has enrolled real cards on real hardware; it has NOT yet been used for a
 full seasonal batch of 200-300 workers. That's the production distinction — until
-that has happened, describe as "phase-1 proven, awaiting first seasonal run" rather
-than "production-ready".
-
-Phase 2 (camera/OCR verifier) is deliberately folded into phase 3 (web app), because
-the browser's `getUserMedia` is the sensible camera path — see `docs/workflow.md`.
+that has happened, describe as "proven, awaiting first seasonal run" rather than
+"production-ready".
 
 ## Architecture
 
@@ -64,10 +61,6 @@ as reference for `statestream.py`, credited at the top of the file.
   not talk to Google Sheets. Its only write operation is `addusernfc` against one
   user UUID supplied at runtime. Keep it that way - the small blast radius is a
   deliberate design property, not an accident.
-- **OCR must never generate the name written to Loxone.** It matches against a roster
-  the operator supplied; the string written to Loxone always comes from the roster
-  row. A misread must resolve to a correct entry or fail loudly. It must never be
-  able to write a mangled name into the access system.
 - **Never derive Loxone usernames in code without showing the operator.** See the
   naming rules in `docs/workflow.md`. The transformation is presented for review and
   confirmation before any binding happens.

@@ -128,7 +128,7 @@ future, look here.
 - **We do NOT rely on the ordering of the `nfcTags` array from `getuser`.**
   Whether it is insertion-ordered is unknown, so any design that zips it against
   a name list positionally can silently mis-bind every card. Bind at tap time
-  instead. This constraint still holds for phase 2/3.
+  instead.
 
 ## Definition of done — met
 
@@ -138,6 +138,3 @@ future, look here.
 - ○ 250-name stability dry-run — remains as an optional smoke test. Doesn't
   need real cards or a reader — just a long-running dry-run to check the tool
   doesn't drop the websocket or leak resources.
-
-Phase 2 (camera as verifier) is folded into phase 3 (web app) because the
-browser's `getUserMedia` is the sensible camera pipeline. See `docs/workflow.md`.

@@ -32,8 +32,8 @@ during an incident the name is the only human-readable handle.
 
 - **Cards are never returned.** ~250 consumed per season. A reusable pre-enrolled card
   pool was considered and ruled out for this reason.
-- **The employee name must be printed on the card.** Hard requirement. This is also
-  what makes camera-based OCR viable later - the card carries its own identity.
+- **The employee name must be printed on the card.** Hard requirement — how the
+  operator matches a physical card to a roster row when standing at the reader.
 - One physical tap per card is irreducible (see `docs/protocol.md` - the Miniserver
   writes to the card).
 
@@ -73,48 +73,16 @@ The script keeps learn mode armed, captures each tag ID as it arrives, binds it 
 next name in the queue, and journals every pair to CSV.
 
 **Known weakness:** names and tags are joined by queue position. A shuffled stack
-silently mis-names cards. The CSV journal is the only record. This is what the camera
-fixes.
-
-## Phase 2 - camera
-
-Purpose: remove the ordering dependency. The name is already printed on the card, so
-the card can identify itself.
-
-**Ordering: camera first, then tap.** Show card to camera → name resolved and locked →
-tap card → bound. If tapping came first the script would hold a tag ID with no name and
-need a pending state plus an abandon path. This way the tap *is* the confirm action, and
-a bad read costs nothing - re-show the card.
-
-**OCR only ever matches, never generates.** Read text → fuzzy match (`rapidfuzz`)
-against the ~250-name roster → the value written to Loxone comes from the roster row.
-A closed candidate list makes this a much easier problem than general OCR: `Jeroen van
-Soier` still resolves correctly. Only stop and ask when the top two candidates are
-within a few points of each other.
-
-**Introduce it as a verifier before trusting it as an input.** Keep the queue, OCR each
-card, refuse to bind on mismatch. Stack-shuffle detection at near-zero risk, because a
-wrong read costs a pause rather than a mis-bind. Promote to primary input only after it
-has agreed with the queue across a full batch.
-
-Practical issues: glare on glossy dye-sub PVC (diffuse side lighting, camera slightly
-off-axis), and consistent card placement (a cardboard jig gets most of the benefit).
-
-**If the card print template can carry a QR or Code128, use that instead** - machine
-readable beats OCR on every axis. Whether the template is editable is still unknown.
-
-**Ergonomics problem worth solving first:** the Code Touch is wall-mounted. Holding a
-card flat against a wall while aiming it at a clamped webcam, 250 times, is bad. A spare
-Code Touch on a short Tree run at a desk turns this into a proper enrolment bench -
-camera on an arm above, reader below, jig between. Worth doing before the camera.
+silently mis-names cards. The CSV journal is the only record — mitigation is
+operator care with card ordering, plus the already-assigned safety check.
 
 ## Phase 3 - web app
 
 FastAPI backend holding the Loxone session, browser frontend.
 
-The browser is chosen specifically for the camera: `getUserMedia` gives live preview and
-frame capture in ~10 lines, versus fighting OpenCV window handling on Wayland. Also a
-big readable screen for free, and it runs on a tablet at the bench.
+The browser gives a big readable screen for free and runs on a tablet at the
+bench. FastAPI + a plain HTML/CSS/JS SPA-lite keeps the deploy trivial (one
+Python process, no build step for the frontend).
 
 ### Roster input: paste box, NOT the Sheets API
 
@@ -146,16 +114,14 @@ accident is the one mistake dropdowns do not prevent.
 
 ### Screen layout
 
-Header: reader name, connection dot, `47 / 250`, rough ETA.
-Left: camera preview with a fixed target rectangle.
-Right: state panel - the entire UI, one big word plus a name. Four colour-coded states:
-grey *show a card*, amber *john.smith - matched, tap now*, green *bound*, red *already
-assigned to anne.de.wit*.
-Below: last ten bound, newest first, each with undo.
-Roster tab: all 250 with status, searchable. Useless for 240 cards, indispensable for
-the last ten.
-Footer: manual type-ahead pick, for when a card is scuffed and OCR will not cooperate.
-There must always be a way to proceed without the camera.
+Header: workspace name, step title, status dot for "reader armed".
+Center: big "Scan the card for" panel with the roster name in huge letters,
+"up next" line, progress `X / N bound`, Stop button. Big enough to read
+across the room.
+Right: roster panel with per-row status (bound / pending / skipped) so the
+operator can see the whole batch at a glance.
+Below: live tap log — bound / skipped / errored events in order.
+History (behind a slide-out): past sessions with roster audit + resume.
 
 ### Two things that matter more than the layout
 
@@ -213,17 +179,14 @@ file. Restrict file permissions; consider whether that machine is encrypted.
 
 ## Self-hosting on Proxmox
 
-Works, and the split is clean: `getUserMedia` runs in the browser, so the camera belongs
-to whatever device the operator is holding. Backend in an LXC container, browser on the
-bench laptop or tablet. The container needs no camera, only reachability to the
-Miniserver. Bonus: credentials live on a controlled server rather than a laptop that
-goes home with someone.
+Backend in an LXC container, browser on the bench laptop or tablet. The
+container only needs reachability to the Miniservers (TCP 80 on LAN).
+Credentials live on a controlled server rather than a laptop that goes
+home with someone.
 
-**Gotcha that will bite:** `getUserMedia` requires a secure context.
-`http://10.40.x.x:8000` gets no camera access. Either put it behind a reverse proxy
-with a real certificate (internal CA, or Let's Encrypt via DNS-01 on an internal name)
-or run on localhost. Run locally on a laptop for the first season, move into Proxmox
-once the workflow has survived a real run.
+Optionally reverse-proxy the app so it's reachable at a hostname over
+HTTPS across the LAN — nicer for colleagues than remembering an IP + port,
+and lets more than one admin use it without co-locating with the container.
 
 ## Out of scope, deliberately
 
