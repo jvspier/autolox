@@ -10,6 +10,38 @@ roster, moves on.
 Written for a seasonal 200-300-worker enrolment cycle, but useful anywhere
 you'd otherwise be clicking "Learn NFC Tag" 250 times.
 
+## Screenshots
+
+![Setup screen](docs/screenshots/startpage.png)
+
+Setup: pick a reader from the dropdown, pick a target Loxone user, paste
+the roster of names to enrol.
+
+![Review](docs/screenshots/example-session.png)
+
+Review: each roster name is transformed to the Loxone-form
+(`Jan Jansen` → `jan.jansen`), warnings surfaced per row before anything
+is written to Loxone.
+
+![Enrolment in progress](docs/screenshots/learning-mode.png)
+
+Enrolling: the current card's name shown in big letters — legible from
+across the room — with a live tap log and per-row roster status alongside.
+
+![Session summary](docs/screenshots/summary.png)
+
+Summary after a completed session: bound / skipped / errored counts.
+
+![Session history](docs/screenshots/history-tab.png)
+
+History slide-out: every past session with target user, timestamp, and
+counts. Sessions that ended prematurely offer a one-click resume.
+
+![Per-session detail](docs/screenshots/history-session.png)
+
+Session detail with a roster audit: every intended enrollee shown against
+what actually happened (bound / dry-run / skipped / pending).
+
 ## Two ways to run it
 
 - **Web app** — FastAPI backend + browser UI. Paste roster → pick user +
@@ -90,7 +122,8 @@ Full CLI flag reference in [docs/cli.md](docs/cli.md).
   routing, session history with roster audit + resume, big-format
   "scan the card for" panel for cross-the-room legibility, roster
   paste helpers.
-- **LXC deployment**: planned. Dockerfile / systemd / TLS reverse proxy.
+- **Docker / Podman deployment**: verified.
+- **Debian 13 LXC deployment**: verified via the one-shot installer.
 
 See [CLAUDE.md](CLAUDE.md) for the project brief, hard constraints, and where
 things live. See [docs/](docs/) for the detailed reasoning behind each design
