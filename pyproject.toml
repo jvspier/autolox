@@ -47,4 +47,4 @@ py-modules = ["loxone_bulk_enroll"]
 # and need to travel with the package for non-editable installs and
 # built wheels.
 [tool.setuptools.package-data]
-autolox_web = ["templates/*.html", "static/*.js", "static/*.css"]
+autolox_web = ["templates/*.html", "static/*.js", "static/*.css", "static/*.svg", "static/*.png", "static/*.ico"]
