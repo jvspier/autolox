@@ -321,32 +321,50 @@ body {
     .enrol-layout { grid-template-columns: 1fr; }
 }
 
+/* Prominent "Scan the card for" block. Big enough to read across the
+   room. Replaces the earlier modal focus overlay. */
 .next-card {
     text-align: center;
-    padding: 32px 20px;
+    padding: 44px 32px 32px;
 }
 .next-label {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--text-muted);
-    margin-bottom: 12px;
+    font-size: 16px;
+    letter-spacing: 1px;
+    color: var(--loxone-green);
+    margin-bottom: 20px;
+    font-weight: 500;
 }
 .next-name {
-    font-size: 32px;
+    font-size: clamp(48px, 6vw, 92px);
     font-weight: 700;
     color: var(--loxone-green);
-    font-family: -apple-system, "Consolas", "Menlo", monospace;
-    letter-spacing: -0.5px;
-    word-break: break-all;
+    line-height: 1.05;
+    letter-spacing: -1px;
+    word-break: break-word;
+}
+.next-name.done, .next-name.idle {
+    color: var(--text-muted);
+    font-size: clamp(32px, 4vw, 56px);
+}
+.next-upcoming {
+    margin-top: 18px;
+    font-size: 18px;
+    color: var(--loxone-green-dim);
+    min-height: 22px;
+    font-weight: 400;
 }
 .next-progress {
-    margin-top: 20px;
+    margin-top: 18px;
     font-size: 15px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }
 .remaining { margin-left: 12px; color: var(--text-dim); }
+.next-actions {
+    margin-top: 24px;
+    display: flex;
+    justify-content: center;
+}
 
 .tap-log {
     list-style: none;
@@ -804,107 +822,3 @@ body {
     gap: 10px;
 }
 
-/* ---------------- focus overlay (big scan prompt) ---------------- */
-
-.focus-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 80;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    /* Backdrop-blur on the underlying page. Falls back to a solid
-       darken on browsers without support. */
-    background: rgba(15, 17, 20, 0.55);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    animation: fade 200ms ease-out;
-    pointer-events: none;  /* let clicks pass through to the enrol UI */
-}
-
-.focus-card {
-    background: var(--card);
-    border-radius: 20px;
-    padding: 56px 72px 40px;
-    min-width: min(720px, 88vw);
-    max-width: 92vw;
-    text-align: center;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-    border: 1px solid var(--border);
-    pointer-events: auto;
-    position: relative;
-}
-
-.focus-dismiss {
-    position: absolute;
-    top: 14px;
-    right: 18px;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 28px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 4px 12px;
-    border-radius: var(--radius-sm);
-    font-weight: 400;
-    transition: color var(--transition), background var(--transition);
-}
-.focus-dismiss:hover {
-    color: var(--text);
-    background: rgba(255, 255, 255, 0.06);
-}
-
-.focus-actions {
-    margin-top: 32px;
-    display: flex;
-    justify-content: center;
-}
-
-.focus-prompt {
-    font-size: 24px;
-    color: var(--loxone-green);
-    font-weight: 500;
-    margin-bottom: 24px;
-    letter-spacing: 0.5px;
-}
-
-.focus-name {
-    font-size: clamp(56px, 8vw, 108px);
-    color: var(--loxone-green);
-    font-weight: 700;
-    line-height: 1.05;
-    letter-spacing: -1px;
-    word-break: break-word;
-    /* Slight font tightening for very long names, else the readable
-       clamp() range keeps it big for typical short human names. */
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter",
-                 Roboto, Helvetica, Arial, sans-serif;
-}
-.focus-name.done { color: var(--text-muted); font-size: clamp(36px, 5vw, 72px); }
-.focus-name.idle { color: var(--text-muted); font-size: clamp(36px, 5vw, 72px); }
-
-.focus-next {
-    margin-top: 24px;
-    font-size: 22px;
-    color: var(--loxone-green-dim);
-    font-weight: 400;
-    letter-spacing: 0.3px;
-    min-height: 26px;
-}
-
-.focus-progress {
-    margin-top: 20px;
-    font-size: 16px;
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-}
-
-/* Actions row gets a nicer layout with the toggle on the left */
-.focus-toggle-label {
-    margin-right: auto;
-    font-size: 13px;
-    color: var(--text-muted);
-}
-.focus-toggle-label .hint { color: var(--text-dim); font-style: italic; }
-.actions { align-items: center; }

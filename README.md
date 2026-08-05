@@ -59,10 +59,14 @@ Drop `--dry-run` (or untick "Dry run" in the web UI) to actually bind.
 - **Phase-1 CLI**: verified end-to-end against real hardware.
 - **Phase-3 iteration 1 (web app)**: verified end-to-end, including
   multi-Miniserver Trust routing, session history with roster audit + resume,
-  focus-mode overlay for cross-the-room legibility, roster paste helpers.
-- **Phase-2 (camera OCR verifier)**: planned. Folds into the web app as an
-  optional verifier — off by default so the tool stays fast when you don't
-  need it.
+  big-format "scan the card for" panel for cross-the-room legibility, roster
+  paste helpers.
+- **Phase-2 (camera OCR verifier)**: prototyped with Tesseract.js and
+  dropped. Reliability on glossy printed PVC cards under office lighting
+  wasn't good enough to justify the speed penalty vs the current
+  tap-in-order flow. Documented as a lesson learned rather than
+  something to revisit unless a much better OCR path becomes viable
+  (server-side cloud OCR, or QR/barcode on the card artwork).
 - **Phase-4 (LXC deployment)**: planned. Dockerfile / systemd / TLS reverse
   proxy.
 

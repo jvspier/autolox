@@ -114,6 +114,7 @@
         </label>
     </div>
 
+
     <div class="actions">
         <button id="btn-review" class="btn primary" disabled>Continue → Review</button>
     </div>
@@ -152,13 +153,20 @@
 
     <div class="enrol-layout">
         <div class="live-panel">
+            <!-- Prominent "scan the card for" block — big enough to read
+                 from ~2m away. Formerly a modal overlay; integrated into
+                 the page so roster / tap log stay visible. -->
             <div class="card next-card">
-                <div class="next-label">next card is for</div>
+                <div class="next-label">Scan the card for:</div>
                 <div class="next-name" id="next-name">—</div>
+                <div class="next-upcoming" id="next-upcoming"></div>
                 <div class="next-progress">
                     <span id="progress-done">0</span> /
                     <span id="progress-total">0</span> bound
                     <span id="progress-remaining" class="remaining"></span>
+                </div>
+                <div class="next-actions">
+                    <button id="btn-stop-inline" class="btn danger">Stop session</button>
                 </div>
             </div>
 
@@ -174,13 +182,6 @@
         </div>
     </div>
 
-    <div class="actions">
-        <label class="checkbox focus-toggle-label">
-            <input type="checkbox" id="focus-toggle" checked>
-            <span>Focus mode <em class="hint">(big "next card" overlay, legible across the room)</em></span>
-        </label>
-        <button id="btn-stop" class="btn danger">Stop</button>
-    </div>
 </section>
 
 <!-- Confirmation dialog. Reusable — content set by JS. -->
@@ -195,22 +196,6 @@
     </div>
 </div>
 
-<!-- Focus-mode overlay for enrolment. Rendered outside the .screen so
-     the backdrop-filter blur applies to the whole document body. -->
-<div id="focus-overlay" class="focus-overlay" hidden>
-    <div class="focus-card">
-        <button class="focus-dismiss" id="focus-dismiss"
-                title="Dismiss overlay (Esc). Session keeps running."
-                aria-label="Dismiss overlay">×</button>
-        <div class="focus-prompt">Scan the card for:</div>
-        <div class="focus-name" id="focus-name">—</div>
-        <div class="focus-next" id="focus-next"></div>
-        <div class="focus-progress" id="focus-progress"></div>
-        <div class="focus-actions">
-            <button id="btn-focus-stop" class="btn danger">Stop session</button>
-        </div>
-    </div>
-</div>
 
 <!-- ==================== SCREEN: SUMMARY ==================== -->
 <section id="screen-summary" class="screen">

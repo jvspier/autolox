@@ -6,8 +6,7 @@ Run locally:
 Run in the LXC container:
     uvicorn autolox_web.app:app --host 0.0.0.0 --port 8000
 
-Behind a reverse proxy with a real TLS cert if you'll use the camera
-(iteration 3 — getUserMedia needs a secure context).
+Behind a reverse proxy with a real TLS cert for LAN-wide use.
 """
 from __future__ import annotations
 
@@ -112,6 +111,12 @@ async def users(request: Request) -> list[UserInfo]:
         us = await client.get_userlist()
     except LoxoneError as e:
         raise HTTPException(502, f"user lookup failed: {e}") from e
+    # The `nfc_tag_count` field is deliberately not surfaced to the
+    # frontend — `getuserlist2` always reports zero in our environment
+    # (a documented Loxone quirk) and enriching from our own DB would
+    # over- or under-count relative to what Loxone actually has.
+    # Better silent than confidently wrong. Kept in the response schema
+    # for now in case a future Loxone firmware fills it in.
     return [UserInfo(
         uuid=u.uuid, name=u.name, is_admin=u.is_admin,
         nfc_tag_count=u.nfc_tag_count,

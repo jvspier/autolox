@@ -144,7 +144,8 @@ function renderUsers(filter) {
     for (const u of matches) {
         const opt = document.createElement("option");
         opt.value = u.uuid;
-        opt.textContent = `${u.name}${u.is_admin ? " (admin)" : ""} — ${u.nfc_tag_count} tag(s)`;
+        // Tag count is deliberately not shown — see /api/users comment.
+        opt.textContent = `${u.name}${u.is_admin ? " (admin)" : ""}`;
         opt.dataset.name = u.name;
         sel.appendChild(opt);
     }
@@ -266,6 +267,11 @@ on($("btn-review"), "click", async () => {
 
 function renderReview() {
     const s = state.session;
+    // Reset the Arm button — it may still be disabled+"Arming…" from a
+    // previous attempt that failed silently. Idempotent.
+    const armBtn = $("btn-arm");
+    armBtn.disabled = false;
+    armBtn.textContent = "Arm reader & begin";
     $("review-reader").textContent = `${s.reader.name} (${s.reader.room || "—"})`;
     $("review-user").textContent   = s.user_name;
     $("review-mode").textContent   = s.dry_run ? "DRY RUN — no writes" : "LIVE";
@@ -346,85 +352,41 @@ function renderEnrol() {
     $("status-dot").classList.add("active");
     $("status-dot").title = "armed";
     renderRoster();
-    showFocusOverlayIfEnabled();
-    updateFocusOverlay();
+    updateNextCard();  // populate "Scan the card for" block
 }
 
-// -------------------- focus overlay --------------------
-
-function showFocusOverlayIfEnabled() {
-    // Only show the overlay while the enrol screen is the active one.
-    // The toggle checkbox controls whether it's rendered at all.
-    if ($("focus-toggle").checked) {
-        $("focus-overlay").hidden = false;
-    } else {
-        $("focus-overlay").hidden = true;
-    }
-}
-
-function hideFocusOverlay() {
-    $("focus-overlay").hidden = true;
-}
-
-function updateFocusOverlay() {
+// Populate the "Scan the card for" block from state.live. The name
+// shown is the ROSTER form (matches what's printed on the card) rather
+// than the loxone form (which is the dot-form written to Loxone).
+function updateNextCard() {
     if (!state.live) return;
     const nextPending = state.live.rosterState.find(r => r.status === "pending");
-    const nameEl = $("focus-name");
-    const nextEl = $("focus-next");
-    const progressEl = $("focus-progress");
+    const nameEl = $("next-name");
+    const upEl = $("next-upcoming");
 
-    // The mockup calls for the roster name (matches what's printed on the
-    // card) rather than the loxone name (which is the dot-form). Fall back
-    // to loxone if roster is empty for any reason.
     if (nextPending) {
         nameEl.textContent = nextPending.roster || nextPending.loxone;
         nameEl.classList.remove("done", "idle");
-        // Look ahead by one for the "up next" line
         const idx = state.live.rosterState.indexOf(nextPending);
         const upNext = state.live.rosterState.slice(idx + 1)
                           .find(r => r.status === "pending");
-        nextEl.textContent = upNext
+        upEl.textContent = upNext
             ? `up next: ${upNext.roster || upNext.loxone}`
             : "last one";
     } else {
         nameEl.textContent = "all done";
         nameEl.classList.add("done");
-        nextEl.textContent = "";
+        upEl.textContent = "";
     }
-    const done = state.live.boundIndex;
-    const total = state.live.totalToBind;
-    progressEl.textContent = `${done} / ${total} bound`;
 }
-
-on($("focus-toggle"), "change", showFocusOverlayIfEnabled);
-
-// Dismiss the overlay without stopping the session — un-ticks the focus
-// toggle so the state is consistent for the rest of the session.
-on($("focus-dismiss"), "click", () => {
-    $("focus-toggle").checked = false;
-    hideFocusOverlay();
-});
-
-// Stop session from inside the overlay. Delegates to the same handler
-// as the main Stop button so behaviour is identical.
-on($("btn-focus-stop"), "click", () => $("btn-stop").click());
 
 // Global keyboard shortcuts. Guarded against firing while the operator
 // is typing into an input/textarea (they'd expect Enter to do the
 // expected in-field thing).
 document.addEventListener("keydown", (e) => {
-    // Esc — layered: confirm dialog handles its own; then focus overlay;
-    // then history panel. Confirm is handled inside confirmAction().
-    if (e.key === "Escape") {
-        if (!$("focus-overlay").hidden) {
-            e.preventDefault();
-            $("focus-toggle").checked = false;
-            hideFocusOverlay();
-            return;
-        }
-        // history panel Esc handler is separate; already installed.
-        return;
-    }
+    // Esc — confirm dialog handles its own; history panel has its own;
+    // nothing else needs to react to Esc here.
+    if (e.key === "Escape") return;
 
     const inTextField = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
 
@@ -511,11 +473,9 @@ function onBound(ev) {
         }
     }
     renderRoster();
-    const next = state.live.rosterState.find(r => r.status === "pending");
-    $("next-name").textContent = next ? next.loxone : "—";
     const mode = ev.dry_run ? "[dry-run]" : "bound";
     logEvent("bound", `${mode.padEnd(10)} ${String(ev.index).padStart(3)}  ${ev.loxone_name.padEnd(24)} ${ev.tag_id}`);
-    updateFocusOverlay();
+    updateNextCard();
 }
 
 function onSkipped(ev) {
@@ -544,7 +504,6 @@ function onDone(ev) {
     $("summary-errored").textContent = ev.errored;
     $("summary-remaining").textContent = state.live.totalToBind - ev.bound;
     $("status-dot").classList.remove("active");
-    hideFocusOverlay();
     goTo("summary");
 }
 
@@ -557,11 +516,10 @@ function onStopped(ev) {
     $("summary-errored").textContent = state.live.erroredCount;
     $("summary-remaining").textContent = state.live.totalToBind - bound;
     $("status-dot").classList.remove("active");
-    hideFocusOverlay();
     goTo("summary");
 }
 
-on($("btn-stop"), "click", async () => {
+async function stopSessionClick() {
     const bound = state.live?.boundIndex ?? 0;
     const total = state.live?.totalToBind ?? 0;
     const remaining = total - bound;
@@ -577,7 +535,7 @@ on($("btn-stop"), "click", async () => {
         cancelLabel: "Keep going",
     });
     if (!ok) return;
-    const btn = $("btn-stop");
+    const btn = $("btn-stop-inline");
     btn.disabled = true;
     btn.textContent = "Stopping…";
     try {
@@ -586,9 +544,11 @@ on($("btn-stop"), "click", async () => {
         alert(`Stop failed:\n${e.message}`);
     } finally {
         btn.disabled = false;
-        btn.textContent = "Stop";
+        btn.textContent = "Stop session";
     }
-});
+}
+
+on($("btn-stop-inline"), "click", stopSessionClick);
 
 // -------------------- summary screen --------------------
 
@@ -596,9 +556,19 @@ on($("btn-new-session"), "click", () => {
     if (state.live?.es) state.live.es.close();
     state.session = null;
     state.live = null;
+    // Wipe the roster on the assumption the operator is starting a
+    // different batch. Leaving reader/user/fresh/dry-run intact —
+    // those are usually the same across sessions in one workday.
     state.setup.roster = "";
     $("roster-input").value = "";
-    hideFocusOverlay();
+    updateRosterCount();
+    // Reset the arm button in case a previous attempt left it in a
+    // "Arming…" disabled state. Same for the review preview button.
+    const armBtn = $("btn-arm");
+    armBtn.disabled = false;
+    armBtn.textContent = "Arm reader & begin";
+    const reviewBtn = $("btn-review");
+    reviewBtn.textContent = "Continue → Review";
     updateContinueButton();
     goTo("setup");
 });

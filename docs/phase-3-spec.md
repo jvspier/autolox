@@ -2,7 +2,17 @@
 
 Iteration 1 of a phased build-out. Goal: a working browser UI that mirrors what
 the CLI does today, running as a FastAPI service that can be deployed to an LXC
-container on Proxmox. Camera / OCR (iteration 3) and polish items are deferred.
+container on Proxmox.
+
+**Camera / OCR (originally iteration 3): abandoned 2026-08-05.** Prototyped
+with Tesseract.js client-side; recognition quality on glossy printed PVC
+cards under office lighting was well below what would make the feature
+worth its speed cost. The current tap-in-order flow is fast enough that
+the camera-verifier's original justification (catch shuffled cards) doesn't
+justify the added latency + failure modes. If we ever revisit: server-side
+cloud OCR (Google Vision / AWS Textract), or QR/barcode on the card
+artwork, are the two viable paths — both replace OCR entirely rather than
+tuning it.
 
 Read this doc, mark it up with any changes / questions before implementation
 starts. Iteration boundaries are deliberate — resist creep.
