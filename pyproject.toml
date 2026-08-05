@@ -37,7 +37,14 @@ web = [
 
 [project.scripts]
 loxone-bulk-enroll = "loxone_bulk_enroll:main"
+autolox-web = "autolox_web.__main__:main"
 
 [tool.setuptools]
-packages = ["autolox"]
+packages = ["autolox", "autolox_web"]
 py-modules = ["loxone_bulk_enroll"]
+
+# HTML templates and static assets (CSS/JS) live inside autolox_web
+# and need to travel with the package for non-editable installs and
+# built wheels.
+[tool.setuptools.package-data]
+autolox_web = ["templates/*.html", "static/*.js", "static/*.css"]

@@ -12,32 +12,34 @@ you'd otherwise be clicking "Learn NFC Tag" 250 times.
 
 ## Screenshots
 
-![Setup screen](docs/screenshots/startpage.png)
+<sub>Click any thumbnail to open the full-size version.</sub>
+
+<a href="docs/screenshots/startpage.png"><img src="docs/screenshots/startpage.png" width="640" alt="Setup screen"></a>
 
 Setup: pick a reader from the dropdown, pick a target Loxone user, paste
 the roster of names to enrol.
 
-![Review](docs/screenshots/example-session.png)
+<a href="docs/screenshots/example-session.png"><img src="docs/screenshots/example-session.png" width="640" alt="Review"></a>
 
 Review: each roster name is transformed to the Loxone-form
 (`Jan Jansen` → `jan.jansen`), warnings surfaced per row before anything
 is written to Loxone.
 
-![Enrolment in progress](docs/screenshots/learning-mode.png)
+<a href="docs/screenshots/learning-mode.png"><img src="docs/screenshots/learning-mode.png" width="640" alt="Enrolment in progress"></a>
 
 Enrolling: the current card's name shown in big letters — legible from
 across the room — with a live tap log and per-row roster status alongside.
 
-![Session summary](docs/screenshots/summary.png)
+<a href="docs/screenshots/summary.png"><img src="docs/screenshots/summary.png" width="640" alt="Session summary"></a>
 
 Summary after a completed session: bound / skipped / errored counts.
 
-![Session history](docs/screenshots/history-tab.png)
+<a href="docs/screenshots/history-tab.png"><img src="docs/screenshots/history-tab.png" width="640" alt="Session history"></a>
 
 History slide-out: every past session with target user, timestamp, and
 counts. Sessions that ended prematurely offer a one-click resume.
 
-![Per-session detail](docs/screenshots/history-session.png)
+<a href="docs/screenshots/history-session.png"><img src="docs/screenshots/history-session.png" width="640" alt="Per-session detail"></a>
 
 Session detail with a roster audit: every intended enrollee shown against
 what actually happened (bound / dry-run / skipped / pending).
@@ -88,9 +90,10 @@ pip install -e '.[web]'
 cp .env.example .env && chmod 600 .env
 # edit .env with your Miniserver IPs, service account, passwords
 
-# web app:
+# web app — one-command launcher (starts uvicorn + opens browser):
+python -m autolox_web
+# or plain uvicorn if you prefer no browser auto-open:
 uvicorn autolox_web.app:app --reload --port 8000
-# then open http://localhost:8000
 
 # or the CLI:
 python loxone_bulk_enroll.py --list         # discover readers
