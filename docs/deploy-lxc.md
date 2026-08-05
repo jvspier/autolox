@@ -92,8 +92,8 @@ $EDITOR /etc/autolox/env   # fill in your real values
 You need at minimum:
 
 ```
-LOXONE_HOSTS=10.40.x.1,10.40.x.2,10.40.x.3,10.40.x.4
-LOXONE_USER_HOST=10.40.x.1
+LOXONE_HOSTS=192.0.2.1,192.0.2.2,192.0.2.3,192.0.2.4
+LOXONE_USER_HOST=192.0.2.1
 LOXONE_USER=svc.cardenroll
 LOXONE_PW=<login password>
 LOXONE_VISU_PW=<visu password>
