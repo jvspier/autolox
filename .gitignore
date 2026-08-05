@@ -1,6 +1,9 @@
 # credentials — never commit
 .env
 
+# internal / colleague-facing briefing docs — not for public repo
+docs/internal/
+
 # python
 __pycache__/
 *.py[cod]
