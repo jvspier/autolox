@@ -189,8 +189,9 @@ All **[community]**, and `getuser` / `getgrouplist` additionally **[log]**:
 
 `addoredituser` supports `userState: 4` (valid within a timespan) with
 `validFrom` / `validUntil` (seconds since 2009-01-01) and `expirationAction`
-(0 = deactivate, 1 = delete). **[docs]** Not used by this project - the seasonal-user
-model handles cleanup by deleting one user - but relevant if the model ever changes.
+(0 = deactivate, 1 = delete). **[docs]** Not used by this project - the shared
+batch-user model (see `docs/workflow.md`) handles cleanup by deleting one user -
+but relevant if the model ever changes.
 
 **Do not rely on the ordering of the `nfcTags` array from `getuser`.** Whether it is
 insertion-ordered is unknown, so any design that zips it against a name list positionally

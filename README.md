@@ -7,8 +7,9 @@ at a time in the Loxone web UI" workflow with a tap-and-go tool: tap a card,
 it captures the tag ID off the state stream, binds it to the next name in a
 roster, moves on.
 
-Written for a seasonal 200-300-worker enrolment cycle, but useful anywhere
-you'd otherwise be clicking "Learn NFC Tag" 250 times.
+Built for bulk-enrolling batches of NFC cards — seasonal staff surges, event
+badges, contractor onboarding, whatever — anywhere you'd otherwise be
+clicking "Learn NFC Tag" one card at a time, over and over.
 
 ## Screenshots
 

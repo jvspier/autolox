@@ -7,7 +7,7 @@ provenance.
 
 Do NOT run these steps unnecessarily against production readers. They arm learn
 mode, which visibly affects the reader. The tests below have been performed; the
-tool is ready for a real seasonal batch.
+tool is ready for a real production batch.
 
 ## Prerequisites (as recorded from the original run)
 

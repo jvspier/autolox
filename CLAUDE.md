@@ -5,14 +5,16 @@ code that talks to the Miniserver.
 
 ## What this project is
 
-A tool to bulk-enrol NFC access cards onto a Loxone Miniserver. Replaces a manual
-process of ~250 repetitions per season with a tap-and-go workflow.
+A tool to bulk-enrol NFC access cards onto a Loxone Miniserver. Replaces a manual,
+one-card-at-a-time process - repeated hundreds of times per batch - with a tap-and-go
+workflow.
 
-Context: the company hires 200-300 temporary workers each October for the Christmas
-peak (and potentially other seasonal peaks - Mother's Day etc.). Each worker gets a
-printed DESFire EV3 keycard that must open doors controlled by Loxone. Today an admin
-stands at a wall-mounted NFC Code Touch, uses "NFC Tag Aanleren" in the Loxone web UI,
-taps one card, types the employee name, submits. 250 times.
+Context: any organization that brings on a batch of people needing building access at
+once - a seasonal hiring surge, an event, a cohort of contractors - ends up handing out
+a stack of printed DESFire EV3 keycards that must open doors controlled by Loxone.
+Today an admin stands at a wall-mounted NFC Code Touch, uses "NFC Tag Aanleren" in the
+Loxone web UI, taps one card, types the person's name, submits. Once per card, hundreds
+of times per batch.
 
 ## Current status - read this first
 
@@ -24,8 +26,8 @@ secured command works, learn mode stays armed continuously (~20 min windows test
 card is caught by the safety check.
 
 The code has enrolled real cards on real hardware; it has NOT yet been used for a
-full seasonal batch of 200-300 workers. That's the production distinction — until
-that has happened, describe as "proven, awaiting first seasonal run" rather than
+full production batch of 200-300 cards. That's the production distinction — until
+that has happened, describe as "proven, awaiting first production run" rather than
 "production-ready".
 
 ## Architecture
