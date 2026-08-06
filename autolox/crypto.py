@@ -43,8 +43,21 @@ def rsa_encrypt_session_key(public_key_pem: str, aes_key: bytes, iv: bytes) -> s
 
 @dataclass
 class Session:
-    """AES session state. Key and IV are one per websocket connection.
-    salt rolls forward and is included in every encrypted command."""
+    """AES session state: key, IV, and salt are all fixed for the life of
+    one websocket connection.
+
+    The Miniserver only learns key+IV once, RSA-encrypted in the step-4
+    keyexchange, so every subsequent command must decrypt against that same
+    pair. The salt works the same way here even though it travels inside
+    the encrypted plaintext rather than the RSA blob: the Miniserver
+    tracks the salt it was first given and expects every later `salt/...`
+    command in the session to keep using it. Changing it mid-session is
+    possible via Loxone's `nextSalt/{old}/{new}/{command}` framing, but
+    this tool only ever sends the 3-command handshake (getkey2, getjwt,
+    enablebinstatusupdate) before subscribing to the state stream, so
+    there's nothing to rotate for - don't add salt rotation without also
+    implementing nextSalt, or the Miniserver will 401 the next command
+    (confirmed live 2026-08-06: a same-salt-value "fix" here broke getjwt)."""
 
     key: bytes = field(default_factory=lambda: secrets.token_bytes(32))
     iv: bytes = field(default_factory=lambda: secrets.token_bytes(16))
@@ -52,17 +65,11 @@ class Session:
 
     def encrypt_command(self, command: str) -> str:
         """Wrap `command` for sending as `jdev/sys/enc/{blob}` on an
-        encrypted websocket. Rolls salt forward each call.
-
-        Key and IV stay fixed for the session - the Miniserver only learns
-        them once, RSA-encrypted in the step-4 keyexchange, so it decrypts
-        every subsequent command against that same pair. The salt is a
-        plaintext freshness value inside the encrypted payload itself and
-        has no such constraint, so it advances after every call."""
+        encrypted websocket. Same salt every call - see the class
+        docstring for why."""
         plaintext = f"salt/{self.salt}/{command}\x00".encode("utf-8")
         cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
         blob = base64.b64encode(cipher.encrypt(pad(plaintext, 16))).decode()
-        self.salt = secrets.token_hex(8)
         return "jdev/sys/enc/" + urllib.parse.quote(blob)
 
 
