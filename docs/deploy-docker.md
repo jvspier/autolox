@@ -37,6 +37,16 @@ environment variables passed to Docker. Required values:
 
 `.env.example` in the repo root shows the format.
 
+## Authentication
+
+The web UI gates every route behind HTTP Basic Auth if `AUTOLOX_WEB_PASSWORD`
+is set in `.env` (username via `AUTOLOX_WEB_USER`, default `admin`). Leave it
+unset only if you're already enforcing auth some other way - e.g. a reverse
+proxy with its own `basic_auth`/`forward_auth` directive in front of the
+container, or a network you trust as fully as the Loxone service account
+itself. Without either, anyone who can reach the port can view rosters and
+bind cards.
+
 ## Adding HTTPS
 
 The autolox container speaks plain HTTP on port 8000, matching how most

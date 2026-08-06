@@ -147,3 +147,6 @@ decision and the Loxone protocol reverse-engineering notes.
   Never on argv.
 - The tool's only write endpoint is `addusernfc` against one runtime-supplied
   user UUID. Small blast radius by design.
+- The web UI gates every route behind HTTP Basic Auth when
+  `AUTOLOX_WEB_PASSWORD` is set (see `.env.example`) - set it, or make sure a
+  reverse proxy in front of it enforces its own auth instead.

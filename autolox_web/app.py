@@ -10,6 +10,8 @@ Behind a reverse proxy with a real TLS cert for LAN-wide use.
 """
 from __future__ import annotations
 
+import base64
+import hmac
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,12 +21,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sse_starlette.sse import EventSourceResponse
+from starlette.responses import Response
 
 from autolox.client import LoxoneClient, LoxoneError
 from autolox.naming import transform_all
 from autolox.storage import Store
 
-from autolox_web.deps import load_config
+from autolox_web.deps import load_config, load_web_auth
 from autolox_web.models import (
     CreateSessionRequest, CreateSessionResponse, HistoryBindingRow,
     HistorySessionDetail, HistorySessionRow, ReaderInfo, RosterAuditRow,
@@ -38,6 +41,48 @@ _LOG = logging.getLogger("autolox_web")
 
 
 _HERE = Path(__file__).parent
+
+
+class _BasicAuthMiddleware:
+    """Gate every request behind one shared username/password.
+
+    Pure ASGI (not Starlette's BaseHTTPMiddleware) so it passes the
+    lifespan scope and the /api/session/{id}/events SSE stream straight
+    through untouched rather than buffering them - BaseHTTPMiddleware is
+    known to interact badly with streaming responses.
+
+    Same threat model as the Loxone visu password (docs/workflow.md's
+    Credentials section): one shared credential for whoever is running
+    the enrolment session, not per-operator identity.
+    """
+
+    def __init__(self, app, username: str, password: str):
+        self._app = app
+        self._user = username.encode()
+        self._pw = password.encode()
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] not in ("http", "websocket"):
+            await self._app(scope, receive, send)
+            return
+
+        header = dict(scope.get("headers") or []).get(b"authorization", b"")
+        if header.startswith(b"Basic "):
+            try:
+                user, _, pw = base64.b64decode(header[6:]).partition(b":")
+            except Exception:
+                user, pw = b"", b""
+            if hmac.compare_digest(user, self._user) and hmac.compare_digest(pw, self._pw):
+                await self._app(scope, receive, send)
+                return
+
+        if scope["type"] == "websocket":
+            await send({"type": "websocket.close", "code": 4401})
+            return
+
+        response = Response(status_code=401,
+                             headers={"WWW-Authenticate": 'Basic realm="autolox"'})
+        await response(scope, receive, send)
 
 
 @asynccontextmanager
@@ -76,6 +121,17 @@ async def _lifespan(app: FastAPI):
 
 
 app = FastAPI(title="autolox", lifespan=_lifespan)
+
+_web_user, _web_password = load_web_auth()
+if _web_password:
+    app.add_middleware(_BasicAuthMiddleware, username=_web_user, password=_web_password)
+    _LOG.info("web UI Basic Auth enabled (user=%s)", _web_user)
+else:
+    _LOG.warning(
+        "AUTOLOX_WEB_PASSWORD not set - the web UI has NO authentication. "
+        "Anyone who can reach this port can view rosters and bind cards. "
+        "Set AUTOLOX_WEB_USER / AUTOLOX_WEB_PASSWORD in .env to enable Basic Auth.")
+
 app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
 _templates = Jinja2Templates(directory=_HERE / "templates")
 

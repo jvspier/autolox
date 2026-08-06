@@ -60,3 +60,16 @@ def load_config(env_file: str | None = None) -> WebConfig:
 
     return WebConfig(reader_hosts=reader_hosts, user_host=user_host,
                      user=user, password=password, visu_password=visu)
+
+
+def load_web_auth(env_file: str | None = None) -> tuple[str, str | None]:
+    """Basic-auth credentials for the web UI itself - separate from the
+    Loxone service-account credentials in WebConfig. Password is optional:
+    if unset, the web UI runs with no authentication (the original iteration-1
+    tradeoff, documented in docs/phase-3-spec.md) rather than refusing to
+    start, so existing deployments aren't broken by upgrading in place."""
+    load_dotenv(env_file or os.environ.get("LOXONE_ENV_FILE", ".env"),
+                override=False)
+    user = os.environ.get("AUTOLOX_WEB_USER", "").strip() or "admin"
+    password = os.environ.get("AUTOLOX_WEB_PASSWORD", "").strip() or None
+    return user, password

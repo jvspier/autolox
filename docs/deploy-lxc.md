@@ -138,6 +138,16 @@ sudo systemctl restart autolox
 
 Or just re-run `lxc-install.sh` — it's idempotent.
 
+## Authentication
+
+The web UI gates every route behind HTTP Basic Auth if `AUTOLOX_WEB_PASSWORD`
+is set in `/etc/autolox/env` (username via `AUTOLOX_WEB_USER`, default
+`admin`). Leave it unset only if a reverse proxy in front of the LXC already
+enforces its own auth (see the Caddyfile below - add a `basic_auth`
+directive there instead if you'd rather centralize auth at the proxy).
+Without either, anyone who can reach port 8000 can view rosters and bind
+cards.
+
 ## HTTPS (optional)
 
 autolox itself only speaks plain HTTP on port 8000. This is fine on a
