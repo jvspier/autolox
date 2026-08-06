@@ -51,7 +51,7 @@ clicking "Learn NFC Tag" one card at a time, over and over.
 
 <p align="center">Session detail with a roster audit: every intended enrollee shown against what actually happened (bound / dry-run / skipped / pending).</p>
 
-## Two ways to run it
+## Web app or CLI
 
 - **Web app** — FastAPI backend + browser UI. Paste roster → pick user +
   reader → review → tap cards. Big legible "next card" overlay for
@@ -62,7 +62,7 @@ clicking "Learn NFC Tag" one card at a time, over and over.
 
 ## Quick start
 
-Three ways to run it, pick whichever fits your environment.
+Three ways to install it, pick whichever fits your environment.
 
 ### Docker (recommended for most people)
 
