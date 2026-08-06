@@ -26,6 +26,11 @@
     <div class="topbar-right">
         <span class="status-dot" id="status-dot" title="idle"></span>
         <span class="title" id="step-title">Setup</span>
+        {% if auth_enabled %}
+        <form method="post" action="/logout" class="logout-form">
+            <button type="submit" class="logout-btn" title="Sign out">Sign out</button>
+        </form>
+        {% endif %}
     </div>
 </header>
 

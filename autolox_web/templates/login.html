@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>autolox — sign in</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+    <div class="topbar-left"></div>
+    <div class="topbar-center"><span class="workspace">autolox</span></div>
+    <div class="topbar-right"></div>
+</header>
+
+<main class="canvas login-canvas">
+    <form class="card login-card" method="post" action="/login">
+        <h2 class="section-heading">Sign in</h2>
+
+        {% if error %}
+        <p class="login-error">Wrong username or password.</p>
+        {% endif %}
+
+        <label class="field-label" for="login-username">Username</label>
+        <input type="text" id="login-username" name="username" class="text-input"
+               autocomplete="username" autofocus>
+
+        <label class="field-label" for="login-password">Password</label>
+        <input type="password" id="login-password" name="password" class="text-input"
+               autocomplete="current-password">
+
+        <div class="actions">
+            <button type="submit" class="btn primary">Sign in</button>
+        </div>
+    </form>
+</main>
+
+</body>
+</html>
