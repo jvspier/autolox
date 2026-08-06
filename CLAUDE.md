@@ -30,6 +30,19 @@ full production batch of 200-300 cards. That's the production distinction — un
 that has happened, describe as "proven, awaiting first production run" rather than
 "production-ready".
 
+**Web app is built, deployed, and stability-tested (2026-08-05/06).** Docker/Podman
+and Debian 13 LXC deployment paths both verified on real hardware. A ~101-card dry
+run held stable for 40+ minutes on the LXC (no memory growth, no re-arm gaps, both
+already-assigned detection layers exercised for real). The web UI now sits behind a
+login page (`AUTOLOX_WEB_PASSWORD` in `.env`) after a security review found every
+route was reachable with zero credential - see the Authentication section in
+`docs/deploy-lxc.md` / `docs/deploy-docker.md`. A same-day code-review pass also
+fixed a real exception-handling bug in `autolox/client.py` (HTTP failures weren't
+being converted to the client's own `LoxoneError`, so the documented Trust-cluster
+`getuser` 404 fallback silently never fired) - see `docs/protocol.md`'s Connect
+handshake section for a related crypto gotcha (encrypted-command salt must stay
+fixed per session) found and fixed the same way.
+
 ## Architecture
 
 - `autolox/` — importable Python package.
@@ -92,19 +105,20 @@ as reference for `statestream.py`, credited at the top of the file.
   point at the Miniserver where the target user lives; `reader_host` (aka
   `--host`) should point at the Miniserver that OWNS the target reader. Tree
   devices only respond on their owning Miniserver.
-- Later phases: FastAPI backend + browser frontend, hosted in an LXC container on
-  Proxmox. Phase-1 CLI runs identically in an LXC or on a laptop.
+- Web app (`autolox_web/`): FastAPI backend + browser frontend, built and
+  deployed (Docker/Podman and Debian 13 LXC both verified). Phase-1 CLI runs
+  identically in an LXC or on a laptop.
 
 ## Conventions
 
-- Keep the core enrolment logic importable. The CLI is one caller; the planned web app
+- Keep the core enrolment logic importable. The CLI is one caller; the web app
   is another. The CLI must remain functional as a debugging tool.
 - Credentials never in argv for anything beyond bench testing - they land in shell
   history and are visible in `ps`. Use env vars, a `0600` config file, or a prompt.
-- Journal every card to CSV as it is processed, not at the end of the run. If a
+- Journal every card as it is processed, not at the end of the run. If a
   session dies at card 180 the journal is the only record of what actually happened.
 - Sessions must be resumable. State lives in the Miniserver (via the
-  already-assigned check) and the CSV journal, never in memory only.
+  already-assigned check) and the journal, never in memory only.
 - Filter the four error sentinel IDs before treating anything as a card. They are
   listed in `docs/protocol.md` and they are not tags.
 
@@ -113,7 +127,13 @@ as reference for `statestream.py`, credited at the top of the file.
 - `docs/protocol.md` — Loxone wire protocol, verified endpoints, provenance of each fact
 - `docs/workflow.md` — business process, naming rules, product decisions and why
 - `docs/phase-1.md` — original test plan; largely resolved as of 2026-08-04
-- `autolox/` — Python package (see Architecture above)
+- `autolox/` — Python package (see Architecture above), including
+  `storage.py` — SQLite journal (`autolox.db` by default), the source of
+  truth for the already-bound check and session resumability. CSV export
+  is optional (`AUTOLOX_CSV_EXPORT`), not the primary journal.
+- `autolox_web/` — FastAPI backend (`app.py`, `session.py`, `deps.py`,
+  `models.py`) + Jinja2/vanilla-JS frontend (`templates/`, `static/`).
+  Shares `autolox/` for everything Loxone-related; the web layer is a thin
+  adapter, same as the CLI.
 - `loxone_bulk_enroll.py` — CLI entrypoint on top of `autolox.client`
 - `.env` / `.env.example` — connection & credentials config
-- `enrolled.csv` — append-only journal of every card the tool has processed

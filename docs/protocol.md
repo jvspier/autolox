@@ -61,6 +61,21 @@ A JWT captured from the real web UI while enrolling a card had
 The numeric permission argument that produces 2080 is still not known and not
 needed for this tool.
 
+### Encrypted-command salt must stay fixed per session - CONFIRMED 2026-08-06
+
+The plaintext wrapped inside `jdev/sys/enc/{blob}` is `salt/{salt}/{command}`. The
+Miniserver tracks whatever salt it was first given for a session and expects every
+later `salt/...` command to keep reusing that exact value. Changing it mid-session
+under the plain `salt/` framing (rather than negotiating via Loxone's
+`nextSalt/{old}/{new}/{command}`, which this client does not implement) breaks the
+next encrypted command with a 401. **[log]** Confirmed live against a real
+Miniserver: a same-day code change that rotated the salt after every
+`encrypt_command()` call broke `jdev/sys/getjwt` (the second encrypted command in
+the handshake) immediately after deploy; reverted in `autolox/crypto.py`. This
+client only ever sends the 3-command handshake (`getkey2`, `getjwt`,
+`enablebinstatusupdate`) per websocket session, so there's nothing to rotate for -
+don't add salt rotation without also implementing `nextSalt`.
+
 ## Secured commands
 
 Some operations require a second credential - the *visualisation password*, separate

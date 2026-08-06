@@ -26,8 +26,13 @@ starts. Iteration boundaries are deliberate — resist creep.
 
 - Multi-operator sessions — iteration 1 assumes a single-operator single-tab
   model. Second concurrent operator is undefined behaviour.
-- Authentication on the web app itself. Behind a private network / LXC-only
-  reachability for now. Auth added when we open it beyond LAN.
+- ~~Authentication on the web app itself. Behind a private network / LXC-only
+  reachability for now. Auth added when we open it beyond LAN.~~ Added
+  2026-08-06 after a security review flagged the gap as exploitable even on
+  a trusted LAN (anyone reachable could bind cards with zero credential) -
+  a login page gating every route, same shared credential model as the
+  visu password. See the Authentication section in `docs/deploy-lxc.md` /
+  `docs/deploy-docker.md`.
 - Undo of a bound tag. `--force` behaviour is available via a "rebind" toggle
   later; iteration 1 skips it.
 - Progress persistence across browser refresh. If the browser closes mid-run,
