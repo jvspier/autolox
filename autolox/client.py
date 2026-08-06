@@ -183,7 +183,7 @@ class LoxoneClient:
         are the whole point of `find_readers()`."""
         h = host or self._reader_hosts[0]
         r = await self._http_for(h).get("/data/LoxAPP3.json")
-        r.raise_for_status()
+        _raise_for_status(r, "structure (LoxAPP3.json)")
         return r.json()
 
     async def find_readers(self) -> list[Reader]:
@@ -239,7 +239,7 @@ class LoxoneClient:
         for this endpoint, so this must hit the Miniserver where the user
         lives."""
         r = await self._user_http.get(f"/jdev/sps/getuser/{quote(name)}")
-        r.raise_for_status()
+        _raise_for_status(r, f"getuser({name!r})")
         j = r.json()["LL"]
         if str(j.get("Code") or j.get("code")) != "200":
             raise LoxoneError(f"getuser({name!r}) failed: {j}")
@@ -298,7 +298,7 @@ class LoxoneClient:
         list rather than a peer's filtered view.
         """
         r = await self._user_http.get("/jdev/sps/getuserlist2")
-        r.raise_for_status()
+        _raise_for_status(r, "getuserlist2")
         j = r.json()["LL"]
         if str(j.get("Code") or j.get("code")) != "200":
             raise LoxoneError(f"getuserlist2 failed: {j}")
@@ -338,7 +338,7 @@ class LoxoneClient:
             raise LoxoneError("visu password is required for secured commands")
         r = await self._http_for(host).get(
             f"/jdev/sys/getvisusalt/{self._user}")
-        r.raise_for_status()
+        _raise_for_status(r, "getvisusalt")
         val = r.json()["LL"]["value"]
         h = visu_hash(self._visu, val["key"], val["salt"],
                        val.get("hashAlg", "SHA256"))
@@ -381,7 +381,7 @@ class LoxoneClient:
         # (used for the AES session-key exchange) is host-specific.
         pk_resp = await self._http_for(reader.owner_host).get(
             "/jdev/sys/getPublicKey")
-        pk_resp.raise_for_status()
+        _raise_for_status(pk_resp, "getPublicKey")
         pk = pk_resp.json()["LL"]["value"]
         public_key_pem = normalise_public_key(pk)
 
@@ -494,8 +494,19 @@ class LoxoneError(RuntimeError):
     """Raised when the Miniserver returns a non-200 LL code."""
 
 
+def _raise_for_status(response: httpx.Response, label: str) -> None:
+    """Convert an HTTP-level failure into LoxoneError, so callers only ever
+    need to catch one exception type from this client - notably the
+    getuser/{name} Trust-cluster 404 documented in docs/protocol.md, whose
+    fallback loop in get_user_tags() only catches LoxoneError."""
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise LoxoneError(f"{label}: HTTP {response.status_code}") from e
+
+
 def _check_ll(response: httpx.Response, label: str) -> None:
-    response.raise_for_status()
+    _raise_for_status(response, label)
     j = response.json().get("LL", {})
     code = str(j.get("Code") or j.get("code") or "")
     if code != "200":

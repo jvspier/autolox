@@ -52,10 +52,17 @@ class Session:
 
     def encrypt_command(self, command: str) -> str:
         """Wrap `command` for sending as `jdev/sys/enc/{blob}` on an
-        encrypted websocket. Rolls salt forward each call."""
+        encrypted websocket. Rolls salt forward each call.
+
+        Key and IV stay fixed for the session - the Miniserver only learns
+        them once, RSA-encrypted in the step-4 keyexchange, so it decrypts
+        every subsequent command against that same pair. The salt is a
+        plaintext freshness value inside the encrypted payload itself and
+        has no such constraint, so it advances after every call."""
         plaintext = f"salt/{self.salt}/{command}\x00".encode("utf-8")
         cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
         blob = base64.b64encode(cipher.encrypt(pad(plaintext, 16))).decode()
+        self.salt = secrets.token_hex(8)
         return "jdev/sys/enc/" + urllib.parse.quote(blob)
 
 

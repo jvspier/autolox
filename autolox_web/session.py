@@ -133,6 +133,7 @@ async def _consume_taps(client: LoxoneClient, s: Session, store: Store,
         return
     except Exception as e:
         _LOG.exception("consumer errored")
+        await _finish_session(client, s, store, status="stopped")
         await s.event_queue.put({"type": "error", "reason": str(e)})
         await s.event_queue.put(None)
 

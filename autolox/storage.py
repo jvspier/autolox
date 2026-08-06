@@ -314,6 +314,15 @@ def _row_to_binding(row: sqlite3.Row) -> Binding:
     )
 
 
+def _csv_safe(value: str) -> str:
+    """Neutralize leading characters that spreadsheet apps treat as a
+    formula trigger (CSV injection, CWE-1236). Roster names are
+    operator-pasted text, so this can't be ruled out upstream."""
+    if value and value[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 def _optionally_export_csv(ts, session_id, user_uuid, roster_name,
                             loxone_name, tag_id, tag_name, status,
                             skip_reason) -> None:
@@ -333,8 +342,9 @@ def _optionally_export_csv(ts, session_id, user_uuid, roster_name,
                 w.writerow(["timestamp", "session_id", "user_uuid",
                             "roster_name", "loxone_name", "tag_id",
                             "tag_name", "status", "skip_reason"])
-            w.writerow([ts, session_id, user_uuid, roster_name, loxone_name,
-                        tag_id, tag_name or "", status, skip_reason or ""])
+            w.writerow([ts, session_id, user_uuid, _csv_safe(roster_name),
+                        _csv_safe(loxone_name), tag_id, tag_name or "",
+                        status, skip_reason or ""])
     except OSError:
         pass  # export is best-effort; DB is authoritative
 
