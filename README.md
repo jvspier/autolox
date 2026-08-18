@@ -150,3 +150,7 @@ decision and the Loxone protocol reverse-engineering notes.
 - The web UI gates every route behind a login page when
   `AUTOLOX_WEB_PASSWORD` is set (see `.env.example`) - set it, or make sure a
   reverse proxy in front of it enforces its own auth instead.
+
+## License
+
+[MIT](LICENSE) - free to use, modify, and redistribute.
