@@ -13,6 +13,7 @@ from __future__ import annotations
 import hmac
 import logging
 import secrets
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import parse_qsl
@@ -45,12 +46,15 @@ _HERE = Path(__file__).parent
 
 
 SESSION_COOKIE = "autolox_session"
+SESSION_TTL_SECONDS = 24 * 3600
 
 # In-memory only - login sessions aren't roster/enrolment state (that's all
 # in the DB, per CLAUDE.md's resumability rule), just "is this browser
 # allowed in". A restart clearing everyone's login is an acceptable
-# tradeoff for a tool with this usage pattern; see docs/workflow.md.
-_valid_sessions: set[str] = set()
+# tradeoff for a tool with this usage pattern; see docs/workflow.md. Maps
+# token -> expiry (unix time), so a leaked cookie has a bounded lifetime
+# rather than staying valid until the next restart.
+_valid_sessions: dict[str, float] = {}
 
 
 class _SessionAuthMiddleware:
@@ -83,7 +87,8 @@ class _SessionAuthMiddleware:
         # Request(scope) just for its cookie parser - no receive/send needed
         # since we're only reading headers, not the body.
         token = Request(scope).cookies.get(SESSION_COOKIE)
-        if token in _valid_sessions:
+        expiry = _valid_sessions.get(token) if token else None
+        if expiry is not None and expiry > time.time():
             await self._app(scope, receive, send)
             return
 
@@ -172,16 +177,19 @@ async def login_submit(request: Request):
     username = fields.get("username", "")
     password = fields.get("password", "")
 
-    ok = (
-        _web_password is not None
-        and hmac.compare_digest(username.encode(), _web_user.encode())
-        and hmac.compare_digest(password.encode(), _web_password.encode())
-    )
+    # Both compare_digest calls always run, even on a wrong username - an
+    # `and` that skips the password check based on the username result
+    # would leak a timing side-channel one level up from what
+    # compare_digest itself is meant to prevent.
+    user_ok = hmac.compare_digest(username.encode(), _web_user.encode())
+    pass_ok = (hmac.compare_digest(password.encode(), _web_password.encode())
+               if _web_password is not None else False)
+    ok = _web_password is not None and user_ok and pass_ok
     if not ok:
         return RedirectResponse("/login?error=1", status_code=303)
 
     token = secrets.token_urlsafe(32)
-    _valid_sessions.add(token)
+    _valid_sessions[token] = time.time() + SESSION_TTL_SECONDS
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax")
     return response
@@ -189,7 +197,7 @@ async def login_submit(request: Request):
 
 @app.post("/logout")
 async def logout(request: Request):
-    _valid_sessions.discard(request.cookies.get(SESSION_COOKIE))
+    _valid_sessions.pop(request.cookies.get(SESSION_COOKIE), None)
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(SESSION_COOKIE)
     return response
