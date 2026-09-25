@@ -391,12 +391,28 @@ async def stop_session(request: Request, session_id: str):
     return {"status": "stopped"}
 
 
+@app.get("/api/session/active", response_model=SessionState | None)
+async def get_active_session(request: Request):
+    """The in-flight session, if any. Lets a page that didn't start it
+    (after a refresh, a closed tab, another browser) find it and stop it -
+    otherwise it blocks new sessions with a 409 and, if armed, keeps the
+    reader in learn mode with nothing able to reach it."""
+    s = request.app.state.manager.active
+    if s is None or s.status in ("completed", "stopped"):
+        return None
+    return _session_state(s)
+
+
 @app.get("/api/session/{session_id}", response_model=SessionState)
 async def get_session(request: Request, session_id: str):
     manager: SessionManager = request.app.state.manager
     s = manager.active
     if not s or s.id != session_id:
         raise HTTPException(404, "session not found")
+    return _session_state(s)
+
+
+def _session_state(s: Session) -> SessionState:
     reader_info = ReaderInfo(
         uuid_action=s.reader.uuid_action, name=s.reader.name,
         room=s.reader.room, learn_state_uuid=s.reader.learn_state_uuid,

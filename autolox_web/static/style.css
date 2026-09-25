@@ -141,6 +141,10 @@ body {
 .login-card .actions { margin-top: 20px; justify-content: stretch; }
 .login-card .btn.primary { width: 100%; }
 
+.active-session { border: 1px solid var(--warn); }
+.active-session .card-subheading { color: var(--warn); }
+.active-session-msg { margin: 0 0 8px; }
+
 .login-error {
     color: var(--err);
     margin: 0 0 8px;

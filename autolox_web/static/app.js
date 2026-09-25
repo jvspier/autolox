@@ -19,6 +19,7 @@ const state = {
     },
     session: null,        // {session_id, reader, user_name, transformed, already_bound_count, to_do_count, dry_run}
     live: null,           // {es, boundIndex, totalToBind, rosterState}
+    orphan: null,         // SessionState of a running session this page didn't start
 };
 
 const screens = ["setup", "review", "enrol", "summary"];
@@ -74,8 +75,63 @@ async function apiError(r) {
         const body = await r.json();
         msg = body.detail || body.error || msg;
     } catch (_) { /* ignore */ }
-    return new Error(msg);
+    const err = new Error(msg);
+    err.status = r.status;
+    return err;
 }
+
+// -------------------- orphaned session --------------------
+
+// A session this page didn't start - left behind by a refresh, a closed
+// tab, or another browser. It blocks new sessions (409) and, if armed,
+// keeps the reader in learn mode, so surface it with a way to stop it.
+async function checkActiveSession() {
+    let s = null;
+    try {
+        s = await apiGet("/api/session/active");
+    } catch (_) { /* can't tell; leave the banner as-is */ return null; }
+    state.orphan = s;
+    if (!s) {
+        $("active-session").hidden = true;
+        return null;
+    }
+    const where = s.reader.room ? `${s.reader.name} (${s.reader.room})` : s.reader.name;
+    const mode = s.dry_run ? "dry run" : "live";
+    $("active-session-msg").textContent = s.status === "armed"
+        ? `${where} is in learn mode for ${s.user_name} (${mode}): ` +
+          `${s.bound_count} of ${s.transformed.length} bound.`
+        : `A ${mode} session for ${s.user_name} on ${where} was prepared ` +
+          `but never started.`;
+    $("active-session").hidden = false;
+    return s;
+}
+
+on($("btn-stop-active"), "click", async () => {
+    const s = state.orphan;
+    if (!s) return;
+    const ok = await confirmAction({
+        title: "Stop the running session?",
+        message: "The reader will be disarmed. Cards already bound stay " +
+                 "bound. If someone is enrolling right now from another " +
+                 "browser, this ends their session.",
+        confirmLabel: "Stop session",
+        cancelLabel: "Cancel",
+    });
+    if (!ok) return;
+    const btn = $("btn-stop-active");
+    btn.disabled = true;
+    btn.textContent = "Stopping…";
+    try {
+        await apiPost(`/api/session/${s.session_id}/stop`);
+    } catch (e) {
+        // 404: it already ended on its own - that's the outcome we wanted.
+        if (e.status !== 404) alert(`Stop failed:\n${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Stop session";
+    }
+    await checkActiveSession();
+});
 
 // -------------------- setup screen --------------------
 
@@ -256,7 +312,11 @@ on($("btn-review"), "click", async () => {
         renderReview();
         goTo("review");
     } catch (e) {
-        alert(`Could not prepare session:\n${e.message}`);
+        if (e.status === 409 && await checkActiveSession()) {
+            $("active-session").scrollIntoView({behavior: "smooth", block: "center"});
+        } else {
+            alert(`Could not prepare session:\n${e.message}`);
+        }
     } finally {
         btn.disabled = false;
         btn.textContent = "Continue → Review";
@@ -891,3 +951,4 @@ document.addEventListener("keydown", (e) => {
 goTo("setup");
 updateRosterCount();
 loadDiscovery();
+checkActiveSession();

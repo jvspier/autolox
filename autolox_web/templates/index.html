@@ -70,6 +70,19 @@
 <section id="screen-setup" class="screen active">
     <h2 class="section-heading">Setup</h2>
 
+    <!-- Shown when the server still holds a session this page didn't
+         start (refresh, closed tab, another browser). -->
+    <div class="card active-session" id="active-session" hidden>
+        <h3 class="card-subheading">A session is still running</h3>
+        <p class="active-session-msg" id="active-session-msg"></p>
+        <p class="field-help">Stop it to free the reader and start a new
+            session. To carry on with the remaining names afterwards, open
+            History and use "Resume this session".</p>
+        <div class="actions">
+            <button id="btn-stop-active" class="btn danger">Stop session</button>
+        </div>
+    </div>
+
     <div class="card">
         <label class="field-label" for="reader-select">NFC Code Touch</label>
         <select id="reader-select" class="select"></select>
