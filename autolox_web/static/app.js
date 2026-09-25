@@ -49,6 +49,9 @@ function goTo(step) {
         if (s === step) el.classList.add("active");
         else if (screens.indexOf(s) < screens.indexOf(step)) el.classList.add("done");
     }
+    // Every arrival on Setup re-checks for a running session, so the
+    // banner is never stale (e.g. after finishing one this page continued).
+    if (step === "setup") checkActiveSession();
 }
 
 // -------------------- API helpers --------------------
@@ -97,24 +100,57 @@ async function checkActiveSession() {
     }
     const where = s.reader.room ? `${s.reader.name} (${s.reader.room})` : s.reader.name;
     const mode = s.dry_run ? "dry run" : "live";
-    $("active-session-msg").textContent = s.status === "armed"
-        ? `${where} is in learn mode for ${s.user_name} (${mode}): ` +
-          `${s.bound_count} of ${s.transformed.length} bound.`
-        : `A ${mode} session for ${s.user_name} on ${where} was prepared ` +
-          `but never started.`;
+    const armed = s.status === "armed";
+    $("active-session-title").textContent = armed
+        ? "A session is still running"
+        : "A session was prepared but never started";
+    $("active-session-msg").textContent = armed
+        ? `The reader "${where}" is in learn mode for ${s.user_name} ` +
+          `(${mode}): ${s.bound_count} of ${s.transformed.length} cards bound.`
+        : `A ${mode} session for ${s.user_name} on "${where}" is waiting ` +
+          `on the Review step. The reader is not in learn mode.`;
+    $("active-session-help").textContent = armed
+        ? "Continue picks up where it left off. Stop turns learn mode off " +
+          "and ends the session - you can pick up the remaining names " +
+          "later from History → \"Resume this session\"."
+        : "Continue takes you to its Review step. Discard throws it away " +
+          "so you can start a new session.";
+    $("btn-continue-active").textContent = armed ? "Continue session" : "Continue to Review";
+    $("btn-stop-active").textContent = armed ? "Stop session" : "Discard";
     $("active-session").hidden = false;
     return s;
 }
 
+on($("btn-continue-active"), "click", async () => {
+    // Re-fetch rather than trust the banner: it may have finished or been
+    // stopped from another browser since the banner was drawn.
+    const s = await checkActiveSession();
+    if (!s) return;
+    state.session = s;
+    if (s.status === "armed") {
+        renderEnrol();
+        state.live.continued = true;
+        subscribeEvents();  // its opening snapshot fills in the progress
+        goTo("enrol");
+    } else {
+        renderReview();
+        goTo("review");
+    }
+});
+
 on($("btn-stop-active"), "click", async () => {
     const s = state.orphan;
     if (!s) return;
+    const armed = s.status === "armed";
     const ok = await confirmAction({
-        title: "Stop the running session?",
-        message: "The reader will be disarmed. Cards already bound stay " +
-                 "bound. If someone is enrolling right now from another " +
-                 "browser, this ends their session.",
-        confirmLabel: "Stop session",
+        title: armed ? "Stop the running session?" : "Discard this session?",
+        message: armed
+            ? "Learn mode will be turned off on the reader. Cards already " +
+              "bound stay bound. If someone is enrolling right now from " +
+              "another browser, this ends their session too."
+            : "The prepared session is thrown away. Nothing was written " +
+              "to Loxone.",
+        confirmLabel: armed ? "Stop session" : "Discard",
         cancelLabel: "Cancel",
     });
     if (!ok) return;
@@ -500,10 +536,12 @@ function subscribeEvents() {
     const es = new EventSource(url);
     state.live.es = es;
 
-    es.addEventListener("armed",   (e) => logEvent("info", "learn mode armed. tap cards."));
+    es.addEventListener("snapshot", (e) => onSnapshot(JSON.parse(e.data)));
     es.addEventListener("bound",   (e) => onBound(JSON.parse(e.data)));
     es.addEventListener("skipped", (e) => onSkipped(JSON.parse(e.data)));
-    es.addEventListener("error",   (e) => onServerError(JSON.parse(e.data)));
+    // "error" is also the name of EventSource's own connection-error event,
+    // which carries no data - only the server's version does.
+    es.addEventListener("error",   (e) => { if (e.data) onServerError(JSON.parse(e.data)); });
     es.addEventListener("reader-error", (e) => onReaderError(JSON.parse(e.data)));
     es.addEventListener("done",    (e) => onDone(JSON.parse(e.data)));
     es.addEventListener("stopped", (e) => onStopped(JSON.parse(e.data)));
@@ -515,8 +553,43 @@ function subscribeEvents() {
         // If we've already gone to summary, close cleanly.
         if (["done", "stopped", "server-error"].includes(state.live?.finished)) {
             es.close();
+            return;
+        }
+        // CLOSED means the server refused the reconnect: the session ended
+        // while this page wasn't listening (stopped from another browser
+        // while this one slept, or the server restarted). Say so rather
+        // than leave a frozen "Scan the card for" screen.
+        if (es.readyState === EventSource.CLOSED) {
+            onStopped({reason: "ended while this page was disconnected"});
         }
     };
+}
+
+// First message on every (re)connect: the session's progress right now.
+// Rebuilds the view from it, so a browser that attaches mid-session
+// (Continue, or a tab reconnecting after sleep) shows the truth rather
+// than whatever it last saw. Bound rows are always the first N of the
+// roster - the server works through it in order.
+function onSnapshot(ev) {
+    const live = state.live;
+    const done = live.totalToBind - ev.remaining;
+    live.rosterState.forEach((r, i) => { r.status = i < done ? "bound" : "pending"; });
+    live.boundIndex = done;
+    live.skippedCount = ev.skipped;
+    live.erroredCount = ev.errored;
+    $("progress-done").textContent = done;
+    const remaining = live.totalToBind - done;
+    $("progress-remaining").textContent = remaining ? `(${remaining} to go)` : "(done)";
+    renderRoster();
+    updateNextCard();
+    if (live.snapshotSeen) {
+        logEvent("info", "reconnected - progress refreshed.");
+    } else if (live.continued) {
+        logEvent("info", `continued running session: ${done} of ${live.totalToBind} bound. tap cards.`);
+    } else {
+        logEvent("info", "learn mode armed. tap cards.");
+    }
+    live.snapshotSeen = true;
 }
 
 function onBound(ev) {
@@ -951,4 +1024,3 @@ document.addEventListener("keydown", (e) => {
 goTo("setup");
 updateRosterCount();
 loadDiscovery();
-checkActiveSession();

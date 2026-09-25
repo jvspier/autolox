@@ -1,7 +1,8 @@
 """In-memory session manager for the web app.
 
-One active session at a time (iteration-1 assumption). SSE consumers read
-events off `Session.event_queue`; the enroller pushes them there. On stop
+One active session at a time (iteration-1 assumption). Each SSE stream
+registers its own queue in `Session.subscribers`; the enroller publishes
+every event to all of them. On stop
 or completion the reader is disarmed and the session is closed.
 
 The Store handles durable state (bindings, session records). This module
@@ -37,10 +38,11 @@ class Session:
     bound_count: int = 0
     skipped_count: int = 0
     errored_count: int = 0
-    # asyncio Queue of event dicts for SSE consumers. Sentinel `None`
-    # signals "stream complete".
-    event_queue: asyncio.Queue[dict[str, Any] | None] = field(
-        default_factory=asyncio.Queue,
+    # One queue per connected SSE stream, so every open browser sees every
+    # event (a single shared queue would hand each event to only one of
+    # them). Sentinel `None` signals "stream complete".
+    subscribers: list[asyncio.Queue[dict[str, Any] | None]] = field(
+        default_factory=list,
     )
     _rearm_task: asyncio.Task | None = None
     _consumer_task: asyncio.Task | None = None
@@ -74,7 +76,7 @@ class SessionManager:
         s._rearm_task = asyncio.create_task(_rearm_loop(client, s.reader))
         s._consumer_task = asyncio.create_task(
             _consume_taps(client, s, self._store, session_pw))
-        await s.event_queue.put({
+        _publish(s, {
             "type": "armed",
             "message": "learn mode armed. tap cards.",
         })
@@ -85,8 +87,8 @@ class SessionManager:
             return
         _cancel(s._consumer_task)
         await _finish_session(client, s, self._store, status="stopped")
-        await s.event_queue.put({"type": "stopped", "reason": reason})
-        await s.event_queue.put(None)  # stream sentinel
+        _publish(s, {"type": "stopped", "reason": reason})
+        _publish(s, None)  # stream sentinel
 
     def clear(self) -> None:
         """Drop the reference to the just-finished session so a new one
@@ -121,21 +123,21 @@ async def _consume_taps(client: LoxoneClient, s: Session, store: Store,
             await _handle_tap(ev, client, s, store)
             if not s.pending:
                 await _finish_session(client, s, store, status="completed")
-                await s.event_queue.put({
+                _publish(s, {
                     "type": "done",
                     "bound": s.bound_count,
                     "skipped": s.skipped_count,
                     "errored": s.errored_count,
                 })
-                await s.event_queue.put(None)
+                _publish(s, None)
                 return
     except asyncio.CancelledError:
         return
     except Exception as e:
         _LOG.exception("consumer errored")
         await _finish_session(client, s, store, status="stopped")
-        await s.event_queue.put({"type": "error", "reason": str(e)})
-        await s.event_queue.put(None)
+        _publish(s, {"type": "error", "reason": str(e)})
+        _publish(s, None)
 
 
 async def _finish_session(client: LoxoneClient, s: Session, store: Store, *,
@@ -165,7 +167,7 @@ async def _handle_tap(ev: TagEvent, client: LoxoneClient, s: Session,
     if ev.is_error:
         s.last_tag = None
         reason = ERROR_IDS.get(ev.tag_id, "unknown sentinel")
-        await s.event_queue.put({
+        _publish(s, {
             "type": "reader-error", "tag_id": ev.tag_id, "reason": reason,
         })
         return
@@ -193,7 +195,7 @@ async def _handle_tap(ev: TagEvent, client: LoxoneClient, s: Session,
             status="skipped",
             skip_reason=reason,
         )
-        await s.event_queue.put({
+        _publish(s, {
             "type": "skipped",
             "tag_id": ev.tag_id,
             "assigned_to": assigned_to,
@@ -221,7 +223,7 @@ async def _handle_tap(ev: TagEvent, client: LoxoneClient, s: Session,
                 tag_id=ev.tag_id, tag_name=ev.tag_name,
                 status="error", skip_reason=str(e),
             )
-            await s.event_queue.put({
+            _publish(s, {
                 "type": "error",
                 "roster_name": row.roster,
                 "reason": str(e),
@@ -237,7 +239,7 @@ async def _handle_tap(ev: TagEvent, client: LoxoneClient, s: Session,
         tag_id=ev.tag_id, tag_name=ev.tag_name,
         status=binding_status,
     )
-    await s.event_queue.put({
+    _publish(s, {
         "type": "bound",
         "index": s.bound_count,
         "roster_name": row.roster,
@@ -246,6 +248,12 @@ async def _handle_tap(ev: TagEvent, client: LoxoneClient, s: Session,
         "remaining": len(s.pending),
         "dry_run": s.dry_run,
     })
+
+
+def _publish(s: Session, event: dict[str, Any] | None) -> None:
+    # Queues are unbounded, so put_nowait never blocks or raises.
+    for q in list(s.subscribers):
+        q.put_nowait(event)
 
 
 def _cancel(task: asyncio.Task | None) -> None:

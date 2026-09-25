@@ -181,6 +181,20 @@ class Store:
                 (_now(), status, session_id),
             )
 
+    def close_stale_sessions(self) -> int:
+        """Mark every still-'active' session as stopped. For the web app's
+        startup: in-flight sessions live only in process memory, so any
+        row still 'active' at boot belongs to a process that is gone (a
+        restart, crash, or power cut) and would otherwise show as active in
+        History forever. Returns how many rows were closed."""
+        with self._write_lock:
+            cur = self._conn.execute(
+                "UPDATE sessions SET ended_at = ?, status = 'stopped'"
+                " WHERE status = 'active'",
+                (_now(),),
+            )
+        return cur.rowcount
+
     def get_session(self, session_id: str) -> Session | None:
         row = self._conn.execute(
             "SELECT * FROM sessions WHERE id = ?", (session_id,),

@@ -10,6 +10,7 @@ Behind a reverse proxy with a real TLS cert for LAN-wide use.
 """
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import secrets
@@ -108,6 +109,10 @@ async def _lifespan(app: FastAPI):
     """App startup: load config, open store, open Loxone client."""
     cfg = load_config()
     store = Store()
+    stale = store.close_stale_sessions()
+    if stale:
+        _LOG.info("marked %d session(s) left over from a previous run as stopped",
+                  stale)
     client = LoxoneClient(
         reader_hosts=cfg.reader_hosts,
         user=cfg.user,
@@ -127,9 +132,11 @@ async def _lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # Best-effort shutdown: stop any active session, close client + store.
+        # Best-effort shutdown: stop any active session (prepared-but-unarmed
+        # ones too, so History doesn't show them as active), close client
+        # + store.
         active = manager.active
-        if active and active.status == "armed":
+        if active and active.status in ("setup", "armed"):
             try:
                 await manager.stop(client, reason="shutdown")
             except Exception:
@@ -366,15 +373,36 @@ async def start_session(request: Request, session_id: str):
 async def session_events(request: Request, session_id: str):
     manager: SessionManager = request.app.state.manager
     s = manager.active
-    if not s or s.id != session_id:
+    if not s or s.id != session_id or s.status in ("completed", "stopped"):
         raise HTTPException(404, "session not found or already ended")
 
+    # Register and snapshot with no await in between, so no event can land
+    # between "state as of the snapshot" and "first event this stream sees".
+    # The snapshot is what lets a browser that (re)attaches mid-session -
+    # Continue from another device, or a tab reconnecting after sleep -
+    # show correct progress instead of starting from zero.
+    queue: asyncio.Queue = asyncio.Queue()
+    s.subscribers.append(queue)
+    snapshot = {
+        "type": "snapshot",
+        "status": s.status,
+        "bound": s.bound_count,
+        "skipped": s.skipped_count,
+        "errored": s.errored_count,
+        "remaining": len(s.pending),
+    }
+
     async def stream():
-        while True:
-            event = await s.event_queue.get()
-            if event is None:
-                break
-            yield {"event": event["type"], "data": _json(event)}
+        try:
+            yield {"event": "snapshot", "data": _json(snapshot)}
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield {"event": event["type"], "data": _json(event)}
+        finally:
+            if queue in s.subscribers:
+                s.subscribers.remove(queue)
 
     return EventSourceResponse(stream())
 
