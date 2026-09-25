@@ -28,7 +28,8 @@ card is caught by the safety check.
 The code has enrolled real cards on real hardware; it has NOT yet been used for a
 full production batch of 200-300 cards. That's the production distinction — until
 that has happened, describe as "proven, awaiting first production run" rather than
-"production-ready".
+"production-ready". The version (`pyproject.toml`) follows the same rule: 0.9.x
+until that first full batch goes through, then 1.0.0.
 
 **Web app is built, deployed, and stability-tested (2026-08-05/06).** Docker/Podman
 and Debian 13 LXC deployment paths both verified on real hardware. A ~101-card dry
