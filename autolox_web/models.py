@@ -22,6 +22,13 @@ class UserInfo(BaseModel):
     nfc_tag_count: int
 
 
+class Agency(BaseModel):
+    name: str = Field(..., min_length=1)
+    prefix: str = Field(..., pattern=r"^[a-z0-9\-]+$",
+                        description="Goes in front of every Loxone name as "
+                                    "`<prefix>.`, e.g. nh.henk.de.vries")
+
+
 # ---- session create --------------------------------------------------------
 
 
@@ -37,6 +44,11 @@ class CreateSessionRequest(BaseModel):
     roster: list[str] = Field(..., min_length=1,
                                description="Roster names, one per row")
     dry_run: bool = False
+    name_prefix: str = Field(
+        default="",
+        description="Agency prefix prepended to every Loxone name as "
+                    "`<prefix>.`. Empty for none.",
+    )
     fresh: bool = Field(
         default=False,
         description="If true, skip local DB pre-load. Use when Loxone-side "

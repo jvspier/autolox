@@ -742,6 +742,42 @@ body {
 .history-resume .field-help { margin: 0 0 12px; }
 .history-resume .btn { width: 100%; }
 
+/* ---------------- agencies ---------------- */
+
+.agency-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.agency-head .field-label { margin-bottom: 0; }
+.agency-panel {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+.agency-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.agency-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 14px;
+}
+.agency-list code { color: var(--text-muted); margin-left: auto; }
+.agency-remove {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+}
+.agency-remove:hover { color: var(--err); }
+.agency-add { display: flex; gap: 8px; flex-wrap: wrap; }
+.agency-add .text-input { flex: 1 1 140px; width: auto; }
+
 /* ---------------- roster paste helpers ---------------- */
 
 .roster-helpers {

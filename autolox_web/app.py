@@ -32,7 +32,7 @@ from autolox.storage import Store
 
 from autolox_web.deps import load_config, load_web_auth
 from autolox_web.models import (
-    CreateSessionRequest, CreateSessionResponse, HistoryBindingRow,
+    Agency, CreateSessionRequest, CreateSessionResponse, HistoryBindingRow,
     HistorySessionDetail, HistorySessionRow, ReaderInfo, RosterAuditRow,
     RosterEntry, SessionState, UserInfo,
 )
@@ -248,6 +248,29 @@ async def users(request: Request) -> list[UserInfo]:
 # ---- session lifecycle -----------------------------------------------------
 
 
+@app.get("/api/agencies", response_model=list[Agency])
+async def list_agencies(request: Request) -> list[Agency]:
+    store: Store = request.app.state.store
+    return [Agency(name=n, prefix=p) for n, p in store.list_agencies()]
+
+
+@app.post("/api/agencies", response_model=list[Agency])
+async def add_agency(request: Request, body: Agency) -> list[Agency]:
+    store: Store = request.app.state.store
+    try:
+        store.add_agency(body.name.strip(), body.prefix)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+    return await list_agencies(request)
+
+
+@app.delete("/api/agencies/{prefix}", response_model=list[Agency])
+async def remove_agency(request: Request, prefix: str) -> list[Agency]:
+    store: Store = request.app.state.store
+    store.remove_agency(prefix)
+    return await list_agencies(request)
+
+
 @app.post("/api/session", response_model=CreateSessionResponse)
 async def create_session(request: Request, body: CreateSessionRequest):
     client: LoxoneClient = request.app.state.client
@@ -285,7 +308,7 @@ async def create_session(request: Request, body: CreateSessionRequest):
         raise HTTPException(404, "user not found")
 
     # Transform the roster (with warnings surfaced per row)
-    rows = transform_all(body.roster)
+    rows = transform_all(body.roster, prefix=body.name_prefix)
     unusable = [r for r in rows if not r.loxone]
     if unusable:
         raise HTTPException(400,

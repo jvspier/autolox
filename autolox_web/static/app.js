@@ -16,6 +16,7 @@ const state = {
         roster: "",
         dry_run: true,
         fresh: false,
+        name_prefix: "",
     },
     session: null,        // {session_id, reader, user_name, transformed, already_bound_count, to_do_count, dry_run}
     live: null,           // {es, boundIndex, totalToBind, rosterState}
@@ -124,6 +125,7 @@ async function checkActiveSession() {
 on($("btn-continue-active"), "click", async () => {
     // Re-fetch rather than trust the banner: it may have finished or been
     // stopped from another browser since the banner was drawn.
+    unlockAudio();
     const s = await checkActiveSession();
     if (!s) return;
     state.session = s;
@@ -329,6 +331,74 @@ on($("dry-run-toggle"), "change", (e) => {
 on($("fresh-toggle"), "change", (e) => {
     state.setup.fresh = e.target.checked;
 });
+on($("agency-select"), "change", (e) => {
+    state.setup.name_prefix = e.target.value;
+});
+
+// -------------------- agencies --------------------
+
+function renderAgencies(agencies) {
+    const sel = $("agency-select");
+    sel.length = 1;  // keep "None — no prefix"
+    const list = $("agency-list");
+    list.innerHTML = "";
+    for (const a of agencies) {
+        sel.add(new Option(`${a.name} (${a.prefix}.)`, a.prefix));
+        const li = document.createElement("li");
+        li.innerHTML = `<span>${escape(a.name)}</span>
+            <code>${escape(a.prefix)}.</code>
+            <button type="button" class="agency-remove" title="Remove">×</button>`;
+        li.querySelector("button").onclick = () => removeAgency(a);
+        list.appendChild(li);
+    }
+    // Keep the current choice if it still exists, else fall back to none.
+    sel.value = state.setup.name_prefix;
+    if (sel.value !== state.setup.name_prefix) sel.value = "";
+    state.setup.name_prefix = sel.value;
+}
+
+async function loadAgencies() {
+    try {
+        renderAgencies(await apiGet("/api/agencies"));
+    } catch (_) { /* dropdown stays at "None" */ }
+}
+
+async function removeAgency(a) {
+    const ok = await confirmAction({
+        title: `Remove ${a.name}?`,
+        message: `"${a.prefix}." will no longer be offered as a prefix. ` +
+                 `Cards already enrolled are not affected.`,
+        confirmLabel: "Remove",
+    });
+    if (!ok) return;
+    try {
+        const r = await fetch(`/api/agencies/${encodeURIComponent(a.prefix)}`,
+                              {method: "DELETE"});
+        if (!r.ok) throw await apiError(r);
+        renderAgencies(await r.json());
+    } catch (e) {
+        alert(`Could not remove agency:\n${e.message}`);
+    }
+}
+
+on($("agency-manage"), "click", () => {
+    $("agency-panel").hidden = !$("agency-panel").hidden;
+});
+on($("agency-prefix"), "input", (e) => {
+    e.target.value = e.target.value.toLowerCase();
+});
+on($("agency-add"), "submit", async (e) => {
+    e.preventDefault();
+    try {
+        renderAgencies(await apiPost("/api/agencies", {
+            name: $("agency-name").value.trim(),
+            prefix: $("agency-prefix").value.trim(),
+        }));
+        $("agency-add").reset();
+    } catch (err) {
+        alert(`Could not add agency:\n${err.message}`);
+    }
+});
 
 on($("btn-review"), "click", async () => {
     const btn = $("btn-review");
@@ -343,6 +413,7 @@ on($("btn-review"), "click", async () => {
             roster: rosterLines,
             dry_run: state.setup.dry_run,
             fresh: state.setup.fresh,
+            name_prefix: state.setup.name_prefix,
         });
         state.session = res;
         renderReview();
@@ -412,6 +483,7 @@ on($("btn-back-to-setup"), "click", async () => {
 });
 
 on($("btn-arm"), "click", async () => {
+    unlockAudio();
     const btn = $("btn-arm");
     btn.disabled = true;
     btn.textContent = "Arming…";
@@ -606,6 +678,7 @@ function onBound(ev) {
         }
     }
     renderRoster();
+    playPing();
     const mode = ev.dry_run ? "[dry-run]" : "bound";
     logEvent("bound", `${mode.padEnd(10)} ${String(ev.index).padStart(3)}  ${ev.loxone_name.padEnd(24)} ${ev.tag_id}`);
     updateNextCard();
@@ -682,6 +755,39 @@ async function stopSessionClick() {
 }
 
 on($("btn-stop-inline"), "click", stopSessionClick);
+
+// -------------------- success ping --------------------
+
+// Short two-note chime on every bound card, synthesised with Web Audio so
+// there's no sound file to ship. Browsers only allow audio after a user
+// gesture, so the context is created/resumed from the Arm and Continue
+// clicks; until then playPing() is silently a no-op.
+let audioCtx = null;
+
+function unlockAudio() {
+    try {
+        audioCtx ??= new AudioContext();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+    } catch (_) { /* no Web Audio - no ping */ }
+}
+
+function playPing() {
+    if (!audioCtx || audioCtx.state !== "running") return;
+    const t0 = audioCtx.currentTime;
+    for (const [freq, delay] of [[1046.5, 0], [1568, 0.09]]) {  // C6, G6
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        const t = t0 + delay;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.3, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.5);
+    }
+}
 
 // -------------------- summary screen --------------------
 
@@ -1024,3 +1130,4 @@ document.addEventListener("keydown", (e) => {
 goTo("setup");
 updateRosterCount();
 loadDiscovery();
+loadAgencies();

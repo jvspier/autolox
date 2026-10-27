@@ -96,6 +96,28 @@
     </div>
 
     <div class="card">
+        <div class="agency-head">
+            <label class="field-label" for="agency-select">Agency</label>
+            <button type="button" class="chip-btn" id="agency-manage">Manage</button>
+        </div>
+        <select id="agency-select" class="select">
+            <option value="">None — no prefix</option>
+        </select>
+        <p class="field-help">Prefixed to every Loxone name, e.g. <code>nh.henk.de.vries</code>.</p>
+        <div class="agency-panel" id="agency-panel" hidden>
+            <ul class="agency-list" id="agency-list"></ul>
+            <form class="agency-add" id="agency-add">
+                <input type="text" id="agency-name" class="text-input"
+                       placeholder="Agency name" autocomplete="off" required>
+                <input type="text" id="agency-prefix" class="text-input"
+                       placeholder="Prefix, e.g. nh" autocomplete="off" required
+                       pattern="[a-z0-9\-]+" title="lowercase letters, digits or dash">
+                <button type="submit" class="chip-btn">Add</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
         <label class="field-label" for="roster-input">Roster (one name per line)</label>
         <div class="roster-helpers">
             <button type="button" class="chip-btn" id="roster-trim"
@@ -228,7 +250,7 @@
     </div>
 
     <div class="actions">
-        <button id="btn-new-session" class="btn primary">New session</button>
+        <button id="btn-new-session" class="btn primary">Finished — back to start</button>
     </div>
 </section>
 

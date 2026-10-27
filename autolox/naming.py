@@ -11,6 +11,8 @@ Rules from docs/workflow.md, decided by the operator (not this code):
 - dashes are preserved
 - collisions (same result for two different rows) are surfaced to a human
   reviewer — never silently auto-numbered
+- an optional agency prefix is prepended with a dot (`nh` + `Henk de Vries`
+  -> `nh.henk.de.vries`)
 
 This module is pure functions on strings. Testable without a Miniserver.
 """
@@ -39,8 +41,10 @@ class TransformedName:
         return bool(self.warnings)
 
 
-def transform(roster: str) -> TransformedName:
+def transform(roster: str, prefix: str = "") -> TransformedName:
     """Apply the naming rules to a single roster string.
+
+    `prefix` (an agency code like `nh`) is prepended as `<prefix>.`.
 
     Returns the transformed name + any warnings that a human should read.
     Never mutates or invents — if a row is unusable it's returned as-is
@@ -62,6 +66,8 @@ def transform(roster: str) -> TransformedName:
     # Lowercase and replace whitespace runs with a single dot.
     lower = folded.lower()
     dotted = re.sub(r"\s+", ".", lower)
+    if prefix:
+        dotted = f"{prefix}.{dotted}"
 
     # A single-word roster entry (no space -> no dot in the result) used
     # to warn — but it's a legitimate input (nicknames, mononyms,
@@ -76,7 +82,7 @@ def transform(roster: str) -> TransformedName:
     return TransformedName(roster=roster, loxone=dotted, warnings=tuple(warnings))
 
 
-def transform_all(roster: list[str]) -> list[TransformedName]:
+def transform_all(roster: list[str], prefix: str = "") -> list[TransformedName]:
     """Transform a full roster, flagging duplicates.
 
     Duplicate detection is on the transformed form (`loxone`) — if two rows
@@ -85,7 +91,7 @@ def transform_all(roster: list[str]) -> list[TransformedName]:
     resolves collisions itself — CLAUDE.md and docs/workflow.md both require
     a human in the loop.
     """
-    rows = [transform(r) for r in roster]
+    rows = [transform(r, prefix) for r in roster]
     seen: dict[str, list[int]] = {}
     for i, row in enumerate(rows):
         if row.loxone:

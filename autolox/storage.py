@@ -61,7 +61,13 @@ CREATE TABLE IF NOT EXISTS bindings (
 
 CREATE INDEX IF NOT EXISTS idx_bindings_user_status ON bindings(user_uuid, status);
 CREATE INDEX IF NOT EXISTS idx_bindings_session     ON bindings(session_id);
+
+CREATE TABLE IF NOT EXISTS agencies (
+    prefix  TEXT PRIMARY KEY,
+    name    TEXT NOT NULL
+);
 """
+
 
 # Columns added after 0.1.0. Applied on open via ALTER TABLE ADD COLUMN,
 # guarded by PRAGMA table_info so it's idempotent. Kept in sync with
@@ -215,6 +221,30 @@ class Store:
                 (limit,),
             ).fetchall()
         return [_row_to_session(r) for r in rows]
+
+    # ---- agencies ---------------------------------------------------
+
+    def list_agencies(self) -> list[tuple[str, str]]:
+        """(name, prefix) pairs, sorted by name."""
+        rows = self._conn.execute(
+            "SELECT name, prefix FROM agencies ORDER BY name COLLATE NOCASE",
+        ).fetchall()
+        return [(r["name"], r["prefix"]) for r in rows]
+
+    def add_agency(self, name: str, prefix: str) -> None:
+        """Raises ValueError if the prefix is already taken."""
+        try:
+            with self._write_lock:
+                self._conn.execute(
+                    "INSERT INTO agencies (prefix, name) VALUES (?, ?)",
+                    (prefix, name))
+        except sqlite3.IntegrityError:
+            raise ValueError(f"prefix {prefix!r} is already in use") from None
+
+    def remove_agency(self, prefix: str) -> None:
+        with self._write_lock:
+            self._conn.execute("DELETE FROM agencies WHERE prefix = ?",
+                               (prefix,))
 
     # ---- bindings ---------------------------------------------------
 
